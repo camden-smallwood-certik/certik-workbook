@@ -1,0 +1,68 @@
+<html>
+    <head>
+        <style>
+            html {
+                font-family: poppins, sans-serif;
+                color: rgb(85, 84, 85);
+            }
+            h1, h2, h3, h4, h5, h6 {
+                font-family: open-sans,sans-serif;
+                margin: 0%;
+                padding: 6.5px;
+            }
+            h1 img, h2 img, h3 img, h4 img, h5 img, h6 img {
+                width: 40px;
+                margin-right: 6.5pt;
+            }
+            table {
+                margin-left: auto;
+                margin-right: auto;
+                table-layout: fixed;
+                width: 800px;
+                border: 0px none transparent;
+                border-collapse: collapse;
+            }
+            table tr th, table tr td {
+                vertical-align: top;
+                background-color: transparent;
+                border-bottom: 1px solid #ddd;
+                border-collapse: collapse;
+                font-weight: normal;
+            }
+            code, pre {
+                outline-style: none;
+                background-color: transparent;
+                border: 1px dashed rgb(85, 84, 85);
+            }
+            select, textarea, input[type="text"] {
+                box-sizing: border-box;
+                width: 100%;
+                max-width: 100%;
+            }
+        </style>
+    </head>
+    <body>
+        <table>
+            <tr>
+                <td id="findings" style="border-color: transparent"/>
+            </tr>
+            <tr>
+                <td style="border-color: transparent; text-align: center">
+                    <button onclick="external.invoke('create_finding')">Create Finding</button>
+                </td>
+                <td style="border-color: transparent; text-align: center">
+                    <button onclick="external.invoke('clear_findings')">Clear Findings</button>
+                </td>
+                <td style="border-color: transparent; text-align: center">
+                    <button onclick="external.invoke('create_pdf')">Create PDF</button>
+                </td>
+            </tr>
+        </table>
+        <script>
+            function set_finding_title(id) {
+                var element = document.getElementById('finding' + id.toString() + '_title');
+                external.invoke('set_finding_title ' + id.toString() + ' ' + element.value.toString());
+            }
+        </script>
+    </body>
+</html>

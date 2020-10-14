@@ -1,0 +1,9 @@
+[package]
+name = "certik-workbook"
+version = "0.1.0"
+authors = ["Camden Smallwood <camden.smallwood@certik.org>"]
+edition = "2018"
+
+[dependencies]
+web-view = "0.6.3"
+tinyfiledialogs = "3.3.10"
