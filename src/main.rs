@@ -119,6 +119,10 @@ fn create_finding<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::
         alleviation: String::new()
     };
 
+    add_finding(view, finding)
+}
+
+fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: Finding) -> web_view::WVResult {
     //
     // Create a new finding table
     //
@@ -262,6 +266,9 @@ fn create_finding<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::
 
     let mut findings = HtmlElement::get("findings");
     findings.append_child(new_table);
+
+    assert!(view.user_data_mut().findings.insert(finding.id, finding).is_none());
+
     findings.build(view)
 }
 
