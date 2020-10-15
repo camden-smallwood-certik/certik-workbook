@@ -316,6 +316,8 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Findin
     create_text_area("recommendation", "Recommendation:");
     create_text_area("alleviation", "Alleviation:");
 
+    new_cell.append_child(HtmlElement::new("p", "spacer"));
+
     //
     // Done building new finding table
     //
@@ -334,7 +336,7 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Findin
     // Create the table of contents link
     //
 
-    let mut toc = HtmlElement::get("toc");
+    let mut toc_findings = HtmlElement::get("toc_findings");
     
     let mut p = HtmlElement::new("p", "p");
     p.set_attribute("id", format!("finding{}_link", finding.id).as_str());
@@ -345,8 +347,8 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Findin
 
     p.append_child(link);
 
-    toc.append_child(p);
-    toc.build(view)
+    toc_findings.append_child(p);
+    toc_findings.build(view)
 }
 
 fn remove_finding<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize) -> web_view::WVResult {

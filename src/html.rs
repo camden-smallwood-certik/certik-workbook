@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct HtmlElement {
     pub get: bool,
     pub remove: bool,
