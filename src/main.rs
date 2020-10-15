@@ -39,13 +39,46 @@ fn main() {
         .invoke_handler(|view, arg| {
             if arg.contains(' ') {
                 // Tokenize the input command and parameters
-                let mut iter = arg.split_whitespace();
+                let mut is_string = false;
+                let mut tokens = vec![];
+                let mut token = String::new();
+
+                // Create an iterator to loop over each character
+                let mut iter = arg.chars();
+
+                // Build each token using the character iterator
+                while let Some(c) = iter.next() {
+                    if c.is_whitespace() {
+                        if is_string {
+                            // Push all whitespace characters inside a string to the token
+                            token.push(c);
+                        } else if token.len() != 0 {
+                            // Push the current token to the vector if token is not empty
+                            tokens.push(token);
+                            token = String::new();
+                        }
+                    } else if c == '"' {
+                        // Flip string mode
+                        is_string = !is_string;
+                    } else {
+                        // Push the character to
+                        token.push(c);
+                    }
+                }
+
+                // Push the last token (if any)
+                if token.len() != 0 {
+                    tokens.push(token);
+                }
+
+                // Create an iterator to loop over the tokens
+                let mut iter = tokens.iter();
 
                 // Handle the input command
                 match iter.next().unwrap() {
-                    "remove_finding" => remove_finding(view, iter.next().unwrap().parse().unwrap())?,
-                    "set_finding_title" => set_finding_title(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
-                    _ => unimplemented!("{}", arg)
+                    s if s == "remove_finding" => remove_finding(view, iter.next().unwrap().parse().unwrap())?,
+                    s if s == "set_finding_title" => set_finding_title(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                    s => unimplemented!("{}", s)
                 }
 
                 // Verify all parameters were used
