@@ -1,62 +1,23 @@
+#[macro_use]
+extern crate serde_derive;
+
 pub mod html;
+pub mod report;
 
-use crate::html::HtmlElement;
-
-use std::{
-    collections::HashMap,
-    time::SystemTime
+use crate::{
+    html::HtmlElement,
+    report::Finding
 };
 
-pub struct Report {
-    pub title: String,
-    pub auditors: Vec<Auditor>,
-    pub start_time: SystemTime,
-    pub delivery_time: SystemTime,
-    pub repository: String,
-    pub commit_hashes: Vec<String>,
-    pub overview: String,
-    pub findings: Vec<Finding>
-}
+use std::collections::HashMap;
 
-pub struct Auditor {
-    pub name: String,
-    pub email: String
-}
-
-pub struct Finding {
-    pub id: usize,
-    pub title: String,
-    pub class: String,
-    pub severity: Option<Severity>,
-    pub locations: Vec<Location>,
-    pub description: String,
-    pub recommendation: String,
-    pub alleviation: String
-}
-
-pub enum Severity {
-    Minor,
-    Major,
-    Critical,
-    Informational
-}
-
-pub struct Location {
-    pub file: String,
-    pub lines: Vec<usize>
-}
-
+#[derive(Debug)]
 pub struct StateData {
     pub current_finding_id: usize,
     pub findings: HashMap<usize, Finding>
 }
 
 fn main() {
-    /*match tinyfiledialogs::open_file_dialog("Select a JSON workbook", "", None) {
-        Some(file) => println!("{}", file),
-        None => ()
-    };*/
-
     //
     // TODO: load workbook file here
     //
@@ -92,8 +53,11 @@ fn main() {
             } else {
                 // Handle the input command
                 match arg {
-                    "create_finding" => create_finding(view)?,
                     "exit" => view.exit(),
+                    "load_workbook" => load_workbook(view)?,
+                    "save_workbook" => save_workbook(view)?,
+                    "clear_findings" => clear_findings(view)?,
+                    "create_finding" => create_finding(view)?,
                     _ => unimplemented!("{}", arg)
                 }
             }
@@ -102,6 +66,103 @@ fn main() {
         })
         .run()
         .unwrap();
+}
+
+fn load_workbook<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::WVResult {
+    if let Some(path) = tinyfiledialogs::open_file_dialog("Select a JSON workbook", "workbook.json", None) {
+        use std::fs;
+
+        match fs::read_to_string(path) {
+            Err(error) => {
+                return Err(web_view::Error::Custom(Box::new(error)))
+            }
+
+            Ok(json) => {
+                match serde_json::from_str(json.as_str()) {
+                    Err(error) => {
+                        return Err(web_view::Error::Custom(Box::new(error)))
+                    }
+
+                    Ok(report::Report { mut findings, .. }) => {
+                        clear_findings(view)?;
+                        
+                        findings.sort_by(|lhs, rhs| lhs.id.cmp(&rhs.id));
+                        
+                        for (_, finding) in findings.iter().enumerate() {
+                            add_finding(view, &finding)?;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn save_workbook<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::WVResult {
+    if let Some(path) = tinyfiledialogs::save_file_dialog("Select a JSON workbook", "workbook.json") {
+        use std::{fs::File, io::Write};
+
+        let mut file = match File::create(path) {
+            Err(error) => return Err(web_view::Error::Custom(Box::new(error))),
+            Ok(file) => file
+        };
+
+        let mut report = report::Report {
+            title: "Report Title".to_string(),
+            auditors: vec![
+                report::Auditor {
+                    name: "Camden Smallwood".to_string(),
+                    email: "camden.smallwood@certik.org".to_string()
+                }
+            ],
+            start_time: "Oct. 12, 2020".to_string(),
+            delivery_time: "Oct. 19, 2020".to_string(),
+            repository: "Repository URL".to_string(),
+            commit_hashes: vec!["Commit Hash 1".to_string(), "Commit Hash 2".to_string()],
+            overview: "Executive Overview".to_string(),
+            findings: vec![]
+        };
+
+        for (_, finding) in &view.user_data().findings {
+            report.findings.push(finding.clone());
+        }
+
+        match serde_json::to_string(&report) {
+            Err(error) => {
+                return Err(web_view::Error::Custom(Box::new(error)))
+            }
+
+            Ok(json) => {
+                if let Err(error) = file.write_all(json.as_bytes()) {
+                    return Err(web_view::Error::Custom(Box::new(error)))
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn clear_findings<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::WVResult {
+    let mut elements = vec![];
+
+    for (_, finding) in &view.user_data().findings {
+        let mut element = html::HtmlElement::get(format!("finding{}", finding.id).as_str());
+        element.remove();
+        elements.push(element);
+    }
+
+    for element in elements {
+        element.build(view)?;
+    }
+
+    let state = view.user_data_mut();
+    state.current_finding_id = 0;
+    state.findings.clear();
+
+    Ok(())
 }
 
 fn create_finding<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::WVResult {
@@ -119,10 +180,10 @@ fn create_finding<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::
         alleviation: String::new()
     };
 
-    add_finding(view, finding)
+    add_finding(view, &finding)
 }
 
-fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: Finding) -> web_view::WVResult {
+fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Finding) -> web_view::WVResult {
     //
     // Create a new finding table
     //
@@ -267,7 +328,7 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: Finding
     let mut findings = HtmlElement::get("findings");
     findings.append_child(new_table);
 
-    assert!(view.user_data_mut().findings.insert(finding.id, finding).is_none());
+    assert!(view.user_data_mut().findings.insert(finding.id, finding.clone()).is_none());
 
     findings.build(view)
 }
