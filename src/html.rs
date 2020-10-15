@@ -7,6 +7,7 @@ pub struct HtmlElement {
     pub class: String,
     pub name: String,
     pub inner: Option<String>,
+    pub text: Option<String>,
     pub attrs: HashMap<String, String>,
     pub rows: Vec<HtmlElement>,
     pub cells: Vec<HtmlElement>,
@@ -21,6 +22,7 @@ impl HtmlElement {
             class: class.to_string(),
             name: name.to_string(),
             inner: None,
+            text: None,
             attrs: HashMap::new(),
             rows: vec![],
             cells: vec![],
@@ -35,6 +37,7 @@ impl HtmlElement {
             class: "".to_string(),
             name: name.to_string(),
             inner: None,
+            text: None,
             attrs: HashMap::new(),
             rows: vec![],
             cells: vec![],
@@ -62,6 +65,10 @@ impl HtmlElement {
 
     pub fn set_inner_html(&mut self, html: &str) {
         self.inner = Some(html.to_string());
+    }
+
+    pub fn set_text(&mut self, text: &str) {
+        self.text = Some(text.to_string());
     }
 
     pub fn append_child(&mut self, child: HtmlElement) {
@@ -95,6 +102,10 @@ impl HtmlElement {
 
         if let Some(inner) = &self.inner {
             js.push_str(format!("{}.innerHTML = '{}';", self.name, inner).as_str());
+        }
+
+        if let Some(text) = &self.text {
+            js.push_str(format!("{}.text = '{}';", self.name, text).as_str());
         }
 
         for attr in &self.attrs {

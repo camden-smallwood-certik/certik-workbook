@@ -372,9 +372,10 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Findin
     let mut toc_findings = HtmlElement::get("toc_findings");
     
     let mut p = HtmlElement::new("p", "p");
-    p.set_attribute("id", format!("finding{}_link", finding.id).as_str());
+    p.set_attribute("id", format!("finding{}_link_p", finding.id).as_str());
 
     let mut link = HtmlElement::new("a", "link");
+    link.set_attribute("id", format!("finding{}_link", finding.id).as_str());
     link.set_attribute("href", format!("#finding{}", finding.id).as_str());
     link.set_inner_html(finding.title.as_str());
 
@@ -392,7 +393,7 @@ fn remove_finding<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize) ->
         finding.remove();
         finding.build(view)?;
 
-        let mut link = HtmlElement::get(format!("finding{}_link", id).as_str());
+        let mut link = HtmlElement::get(format!("finding{}_link_p", id).as_str());
         link.remove();
         link.build(view)
     } else {
@@ -404,9 +405,13 @@ fn set_finding_title<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize,
     if let Some(entry) = view.user_data_mut().findings.get_mut(&id) {
         entry.title = title.to_string();
 
-        let mut link = HtmlElement::get(format!("finding{}_link", id).as_str());
-        link.set_inner_html(title);
-        link.build(view)
+        let mut finding_link = HtmlElement::get(format!("finding{}_link", id).as_str());
+        finding_link.set_inner_html(title);
+        finding_link.build(view)?;
+
+        let mut finding_title = HtmlElement::get(format!("finding{}_title", id).as_str());
+        finding_title.set_inner_html(title);
+        finding_title.build(view)
     } else {
         Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
     }
