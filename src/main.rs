@@ -43,7 +43,7 @@ fn main() {
 
                 // Handle the input command
                 match iter.next().unwrap() {
-                    "remove_finding" => removing_finding(view, iter.next().unwrap().parse().unwrap())?,
+                    "remove_finding" => remove_finding(view, iter.next().unwrap().parse().unwrap())?,
                     "set_finding_title" => set_finding_title(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
                     _ => unimplemented!("{}", arg)
                 }
@@ -53,11 +53,10 @@ fn main() {
             } else {
                 // Handle the input command
                 match arg {
-                    "exit" => view.exit(),
+                    "create_finding" => create_finding(view)?,
+                    "clear_findings" => clear_findings(view)?,
                     "load_workbook" => load_workbook(view)?,
                     "save_workbook" => save_workbook(view)?,
-                    "clear_findings" => clear_findings(view)?,
-                    "create_finding" => create_finding(view)?,
                     _ => unimplemented!("{}", arg)
                 }
             }
@@ -66,6 +65,40 @@ fn main() {
         })
         .run()
         .unwrap();
+}
+
+fn create_finding<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::WVResult {
+    let state = view.user_data_mut();
+    state.current_finding_id += 1;
+
+    let finding = Finding {
+        id: state.current_finding_id,
+        title: format!("Finding{}", state.current_finding_id),
+        class: String::new(),
+        severity: None,
+        locations: vec![],
+        description: String::new(),
+        recommendation: String::new(),
+        alleviation: String::new()
+    };
+
+    add_finding(view, &finding)
+}
+
+fn clear_findings<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::WVResult {
+    let mut ids = vec![];
+
+    for id in view.user_data().findings.keys() {
+        ids.push(*id);
+    }
+
+    for id in ids {
+        remove_finding(view, id)?;
+    }
+
+    view.user_data_mut().current_finding_id = 0;
+
+    Ok(())
 }
 
 fn load_workbook<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::WVResult {
@@ -143,44 +176,6 @@ fn save_workbook<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::W
     }
 
     Ok(())
-}
-
-fn clear_findings<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::WVResult {
-    let mut elements = vec![];
-
-    for (_, finding) in &view.user_data().findings {
-        let mut element = html::HtmlElement::get(format!("finding{}", finding.id).as_str());
-        element.remove();
-        elements.push(element);
-    }
-
-    for element in elements {
-        element.build(view)?;
-    }
-
-    let state = view.user_data_mut();
-    state.current_finding_id = 0;
-    state.findings.clear();
-
-    Ok(())
-}
-
-fn create_finding<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::WVResult {
-    let state = view.user_data_mut();
-    state.current_finding_id += 1;
-
-    let finding = Finding {
-        id: state.current_finding_id,
-        title: format!("Finding{}", state.current_finding_id),
-        class: String::new(),
-        severity: None,
-        locations: vec![],
-        description: String::new(),
-        recommendation: String::new(),
-        alleviation: String::new()
-    };
-
-    add_finding(view, &finding)
 }
 
 fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Finding) -> web_view::WVResult {
@@ -330,26 +325,54 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Findin
 
     assert!(view.user_data_mut().findings.insert(finding.id, finding.clone()).is_none());
 
-    findings.build(view)
+    findings.build(view)?;
+
+    // Jump to the new finding
+    view.eval(format!("window.location = '#finding{}'", finding.id).as_str()).unwrap();
+
+    //
+    // Create the table of contents link
+    //
+
+    let mut toc = HtmlElement::get("toc");
+    
+    let mut p = HtmlElement::new("p", "p");
+    p.set_attribute("id", format!("finding{}_link", finding.id).as_str());
+
+    let mut link = HtmlElement::new("a", "link");
+    link.set_attribute("href", format!("#finding{}", finding.id).as_str());
+    link.set_inner_html(finding.title.as_str());
+
+    p.append_child(link);
+
+    toc.append_child(p);
+    toc.build(view)
 }
 
-fn removing_finding<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize) -> web_view::WVResult {
+fn remove_finding<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize) -> web_view::WVResult {
     if view.user_data_mut().findings.remove(&id).is_some() {
+        let _ = view.user_data_mut().findings.remove(&id);
+
         let mut finding = HtmlElement::get(format!("finding{}", id).as_str());
         finding.remove();
-        finding.build(view)
+        finding.build(view)?;
+
+        let mut link = HtmlElement::get(format!("finding{}_link", id).as_str());
+        link.remove();
+        link.build(view)
     } else {
-        println!("No finding id {} was found!", id);
-        Ok(())
+        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
     }
 }
 
 fn set_finding_title<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize, title: &str) -> web_view::WVResult {
     if let Some(entry) = view.user_data_mut().findings.get_mut(&id) {
         entry.title = title.to_string();
-    } else {
-        println!("No finding id {} was found!", id);
-    }
 
-    Ok(())
+        let mut link = HtmlElement::get(format!("finding{}_link", id).as_str());
+        link.set_inner_html(title);
+        link.build(view)
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
+    }
 }

@@ -2,8 +2,9 @@
     <head>
         <style>
             html {
-                font-family: poppins, sans-serif;
                 color: rgb(85, 84, 85);
+                font-family: poppins, sans-serif;
+                scroll-behavior: smooth;
             }
             h1, h2, h3, h4, h5, h6 {
                 font-family: open-sans,sans-serif;
@@ -14,11 +15,17 @@
                 width: 40px;
                 margin-right: 6.5pt;
             }
+            div {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+                overflow: auto;
+            }
             table {
                 margin-left: auto;
                 margin-right: auto;
                 table-layout: fixed;
-                width: 800px;
                 border: 0px none transparent;
                 border-collapse: collapse;
             }
@@ -42,25 +49,28 @@
         </style>
     </head>
     <body>
-        <table>
+        <table style="width: 100%; height: 100%">
             <tr>
-                <td id="findings" style="border-color: transparent"/>
-            </tr>
-            <tr>
-                <td style="border-color: transparent; text-align: center">
-                    <button onclick="external.invoke('create_finding')">Create Finding</button>
+                <td id="toc" style="border-color: transparent; width: 200px">
+                    <center>Table of Contents</center>
                 </td>
-                <td style="border-color: transparent; text-align: center">
-                    <button onclick="external.invoke('clear_findings')">Clear Findings</button>
-                </td>
-                <td style="border-color: transparent; text-align: center">
-                    <button onclick="external.invoke('create_pdf')">Create PDF</button>
-                </td>
-                <td style="border-color: transparent; text-align: center">
-                    <button onclick="external.invoke('load_workbook')">Load Workbook</button>
-                </td>
-                <td style="border-color: transparent; text-align: center">
-                    <button onclick="external.invoke('save_workbook')">Save Workbook</button>
+                <td style="border-color: transparent; width: 100%">
+                    <table style="width: 100%; height: 100%">
+                        <tr>
+                            <td style="border-color: transparent; text-align: center; width: 100%">
+                                <button onclick="external.invoke('create_finding')">Create Finding</button>
+                                <button onclick="external.invoke('clear_findings')">Clear Findings</button>
+                                <button onclick="external.invoke('create_pdf')">Create PDF</button>
+                                <button onclick="external.invoke('load_workbook')">Load Workbook</button>
+                                <button onclick="external.invoke('save_workbook')">Save Workbook</button>
+                            </td>
+                        </tr>
+                        <tr style="height: 100%">
+                            <td style="border-color: transparent">
+                                <div id="findings"/>
+                            </td>
+                        </tr>
+                    </table>
                 </td>
             </tr>
         </table>
