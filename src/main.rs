@@ -95,6 +95,7 @@ fn main() {
                 match arg {
                     "create_finding" => create_finding(view)?,
                     "clear_findings" => clear_findings(view)?,
+                    "export_markdown" => export_markdown(view)?,
                     "load_workbook" => load_workbook(view)?,
                     "save_workbook" => save_workbook(view)?,
                     command => view.eval(format!("alert(\"Command not implemented: \\\"{}\\\"\")", command).as_str())?
@@ -137,6 +138,59 @@ fn clear_findings<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::
     }
 
     view.user_data_mut().current_finding_id = 0;
+
+    Ok(())
+}
+
+fn export_markdown<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::WVResult {
+    if let Some(path) = tinyfiledialogs::save_file_dialog("Select a Markdown file", "workbook.md") {
+        use std::{fs::File, io::Write};
+
+        let mut file = match File::create(path) {
+            Err(error) => return Err(web_view::Error::Custom(Box::new(error))),
+            Ok(file) => file
+        };
+
+        let mut md = String::new();
+
+        for finding in view.user_data().findings.values() {
+            let severity = match finding.severity.unwrap() {
+                report::Severity::Critical => "Critical",
+                report::Severity::Major => "Major",
+                report::Severity::Minor => "Minor",
+                report::Severity::Informational => "Informational"
+            };
+
+            md.push_str("---\n");
+            md.push_str("\n");
+            md.push_str(format!("<section id=\"{}\">\n", severity.to_lowercase()).as_str());
+            md.push_str("\n");
+            md.push_str(format!("### ![](https://svgshare.com/i/QKR.svg){}\n", finding.title).as_str());
+            md.push_str("\n");
+            md.push_str("| Type | Severity | Location | Status |\n");
+            md.push_str("|-|-|-|-|\n");
+            md.push_str(format!("| {} | {} | {} | |\n", finding.class, severity, finding.location).as_str());
+            md.push_str("\n");
+            md.push_str("#### Description:\n");
+            md.push_str("\n");
+            md.push_str(format!("{}\n", finding.description.as_str()).as_str());
+            md.push_str("\n");
+            md.push_str("#### Recommendation:\n");
+            md.push_str("\n");
+            md.push_str(format!("{}\n", finding.recommendation.as_str()).as_str());
+            md.push_str("\n");
+            md.push_str("#### Alleviation:\n");
+            md.push_str("\n");
+            md.push_str(format!("{}\n", finding.alleviation.as_str()).as_str());
+            md.push_str("\n");
+            md.push_str("</section>\n");
+            md.push_str("\n");
+        }
+
+        if let Err(error) = file.write_all(md.as_bytes()) {
+            return Err(web_view::Error::Custom(Box::new(error)))
+        }
+    }
 
     Ok(())
 }
