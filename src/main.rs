@@ -37,6 +37,7 @@ fn main() {
             }
         )
         .invoke_handler(|view, arg| {
+            println!("Command: {}", arg);
             if arg.contains(' ') {
                 // Tokenize the input command and parameters
                 let mut is_string = false;
@@ -80,6 +81,10 @@ fn main() {
                     "set_finding_title" => set_finding_title(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
                     "set_finding_type" => set_finding_type(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
                     "set_finding_severity" => set_finding_severity(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                    "set_finding_location" => set_finding_location(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                    "set_finding_description" => set_finding_description(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                    "set_finding_recommendation" => set_finding_recommendation(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                    "set_finding_alleviation" => set_finding_alleviation(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
                     command => unimplemented!("{}", command)
                 }
 
@@ -111,7 +116,7 @@ fn create_finding<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::
         title: format!("Finding{}", state.current_finding_id),
         class: String::new(),
         severity: None,
-        locations: vec![],
+        location: String::new(),
         description: String::new(),
         recommendation: String::new(),
         alleviation: String::new()
@@ -255,7 +260,7 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Findin
     title_text_input.set_attribute("value", finding.title.as_str());
     title_text_input.set_attribute("style", "font-size: 150%");
     title_text_input.set_attribute("size", "80");
-    title_text_input.set_attribute("onchange", format!("set_finding_title({})", finding.id).as_str());
+    title_text_input.set_attribute("onchange", format!("set_finding_value(\"title\", {})", finding.id).as_str());
     
     title_text_cell.append_child(title_text_input);
 
@@ -294,7 +299,7 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Findin
     header_type_input.set_attribute("type", "text");
     header_type_input.set_attribute("value", finding.class.as_str());
     header_type_input.set_attribute("id", format!("finding{}_type", finding.id).as_str());
-    header_type_input.set_attribute("onchange", format!("set_finding_type({})", finding.id).as_str());
+    header_type_input.set_attribute("onchange", format!("set_finding_value(\"type\", {})", finding.id).as_str());
     
     header_type_cell.append_child(header_type_input);
 
@@ -304,7 +309,7 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Findin
 
     let mut header_severity_select = HtmlElement::new("select", "header_severity_select");
     header_severity_select.set_attribute("id", format!("finding{}_severity", finding.id).as_str());
-    header_severity_select.set_attribute("onchange", format!("set_finding_severity({})", finding.id).as_str());
+    header_severity_select.set_attribute("onchange", format!("set_finding_value(\"severity\", {})", finding.id).as_str());
 
     let mut create_severity_option = |name, text| {
         let mut option = HtmlElement::new("option", format!("finding{}_severity_{}_option", finding.id, name).as_str());
@@ -337,8 +342,9 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Findin
 
     let mut header_location_input = HtmlElement::new("input", "header_location_input");
     header_location_input.set_attribute("type", "text");
-    header_location_input.set_attribute("value", "");
+    header_location_input.set_attribute("value", finding.location.as_str());
     header_location_input.set_attribute("id", format!("finding{}_location", finding.id).as_str());
+    header_location_input.set_attribute("onchange", format!("set_finding_value(\"location\", {})", finding.id).as_str());
 
     header_location_cell.append_child(header_location_input);
 
@@ -357,10 +363,12 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Findin
         header.set_inner_html(text);
         new_cell.append_child(header);
     
-        let mut textarea = HtmlElement::new("textarea", format!("{}_textarea", name).as_str());
+        let mut textarea = HtmlElement::new("textarea", format!("finding{}_{}_textarea", finding.id, name).as_str());
+        textarea.set_inner_html(string);
         textarea.set_attribute("rows", "4");
         textarea.set_attribute("cols", "80");
-        textarea.set_inner_html(string);
+        textarea.set_attribute("id", format!("finding{}_{}", finding.id, name).as_str());
+        textarea.set_attribute("onchange", format!("set_finding_value(\"{}\", {})", name, finding.id).as_str());
         new_cell.append_child(textarea);
     };
 
@@ -461,6 +469,54 @@ fn set_finding_severity<'a>(view: &mut web_view::WebView<'a, StateData>, id: usi
         let mut option = HtmlElement::get(format!("finding{}_severity_{}_option", id, severity).as_str());
         option.set_selected(true);
         option.build(view)
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
+    }
+}
+
+fn set_finding_location<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize, location: &str) -> web_view::WVResult {
+    if let Some(entry) = view.user_data_mut().findings.get_mut(&id) {
+        entry.location = location.to_string();
+
+        let mut finding_location = HtmlElement::get(format!("finding{}_location", id).as_str());
+        finding_location.set_inner_html(location);
+        finding_location.build(view)
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
+    }
+}
+
+fn set_finding_description<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize, description: &str) -> web_view::WVResult {
+    if let Some(entry) = view.user_data_mut().findings.get_mut(&id) {
+        entry.description = description.to_string();
+
+        let mut finding_description = HtmlElement::get(format!("finding{}_description", id).as_str());
+        finding_description.set_inner_html(description);
+        finding_description.build(view)
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
+    }
+}
+
+fn set_finding_recommendation<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize, recommendation: &str) -> web_view::WVResult {
+    if let Some(entry) = view.user_data_mut().findings.get_mut(&id) {
+        entry.recommendation = recommendation.to_string();
+
+        let mut finding_recommendation = HtmlElement::get(format!("finding{}_recommendation", id).as_str());
+        finding_recommendation.set_inner_html(recommendation);
+        finding_recommendation.build(view)
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
+    }
+}
+
+fn set_finding_alleviation<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize, alleviation: &str) -> web_view::WVResult {
+    if let Some(entry) = view.user_data_mut().findings.get_mut(&id) {
+        entry.alleviation = alleviation.to_string();
+
+        let mut finding_alleviation = HtmlElement::get(format!("finding{}_alleviation", id).as_str());
+        finding_alleviation.set_inner_html(alleviation);
+        finding_alleviation.build(view)
     } else {
         Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
     }

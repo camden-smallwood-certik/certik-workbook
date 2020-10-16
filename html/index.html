@@ -90,17 +90,9 @@
             </tr>
         </table>
         <script>
-            function set_finding_title(id) {
-                var element = document.getElementById('finding' + id.toString() + '_title');
-                external.invoke('set_finding_title ' + id.toString() + ' "' + element.value.toString() + '"');
-            }
-            function set_finding_type(id) {
-                var element = document.getElementById('finding' + id.toString() + '_type');
-                external.invoke('set_finding_type ' + id.toString() + ' "' + element.value.toString() + '"');
-            }
-            function set_finding_severity(id) {
-                var element = document.getElementById('finding' + id.toString() + '_severity');
-                external.invoke('set_finding_severity ' + id.toString() + ' "' + element.value.toString() + '"');
+            function set_finding_value(name, id) {
+                var element = document.getElementById('finding' + id.toString() + '_' + name);
+                external.invoke('set_finding_' + name + ' ' + id.toString() + ' "' + element.value.toString() + '"');
             }
         </script>
     </body>

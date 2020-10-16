@@ -24,7 +24,7 @@ pub struct Finding {
     pub title: String,
     pub class: String,
     pub severity: Option<Severity>,
-    pub locations: Vec<Location>,
+    pub location: String,
     pub description: String,
     pub recommendation: String,
     pub alleviation: String
