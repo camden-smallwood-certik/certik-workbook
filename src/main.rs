@@ -61,7 +61,7 @@ fn main() {
                         // Flip string mode
                         is_string = !is_string;
                     } else {
-                        // Push the character to
+                        // Push the character to the token
                         token.push(c);
                     }
                 }
