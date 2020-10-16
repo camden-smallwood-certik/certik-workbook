@@ -8,6 +8,9 @@ pub struct HtmlElement {
     pub name: String,
     pub inner: Option<String>,
     pub text: Option<String>,
+    pub value: Option<String>,
+    pub selected: Option<bool>,
+    pub selected_index: Option<usize>,
     pub attrs: HashMap<String, String>,
     pub rows: Vec<HtmlElement>,
     pub cells: Vec<HtmlElement>,
@@ -23,6 +26,9 @@ impl HtmlElement {
             name: name.to_string(),
             inner: None,
             text: None,
+            value: None,
+            selected: None,
+            selected_index: None,
             attrs: HashMap::new(),
             rows: vec![],
             cells: vec![],
@@ -38,6 +44,9 @@ impl HtmlElement {
             name: name.to_string(),
             inner: None,
             text: None,
+            value: None,
+            selected: None,
+            selected_index: None,
             attrs: HashMap::new(),
             rows: vec![],
             cells: vec![],
@@ -71,6 +80,18 @@ impl HtmlElement {
         self.text = Some(text.to_string());
     }
 
+    pub fn set_value(&mut self, value: &str) {
+        self.value = Some(value.to_string());
+    }
+
+    pub fn set_selected(&mut self, selected: bool) {
+        self.selected = Some(selected);
+    }
+
+    pub fn set_selected_index(&mut self, index: Option<usize>) {
+        self.selected_index = index;
+    }
+
     pub fn append_child(&mut self, child: HtmlElement) {
         self.children.push(child);
     }
@@ -100,12 +121,24 @@ impl HtmlElement {
             return;
         }
 
-        if let Some(inner) = &self.inner {
+        if let Some(ref inner) = self.inner {
             js.push_str(format!("{}.innerHTML = '{}';", self.name, inner).as_str());
         }
 
-        if let Some(text) = &self.text {
+        if let Some(ref text) = self.text {
             js.push_str(format!("{}.text = '{}';", self.name, text).as_str());
+        }
+
+        if let Some(ref value) = self.value {
+            js.push_str(format!("{}.value = '{}';", self.name, value).as_str());
+        }
+
+        if let Some(ref value) = self.value {
+            js.push_str(format!("{}.value = '{}';", self.name, value).as_str());
+        }
+
+        if let Some(true) = self.selected {
+            js.push_str(format!("{}.selected = true;", self.name).as_str());
         }
 
         for attr in &self.attrs {
