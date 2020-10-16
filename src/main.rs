@@ -85,7 +85,7 @@ fn main() {
                     "set_finding_description" => set_finding_description(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
                     "set_finding_recommendation" => set_finding_recommendation(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
                     "set_finding_alleviation" => set_finding_alleviation(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
-                    command => unimplemented!("{}", command)
+                    command => view.eval(format!("alert(\"Command not implemented: '{}'\")", command).as_str())?
                 }
 
                 // Verify all parameters were used
@@ -97,7 +97,7 @@ fn main() {
                     "clear_findings" => clear_findings(view)?,
                     "load_workbook" => load_workbook(view)?,
                     "save_workbook" => save_workbook(view)?,
-                    command => unimplemented!("{}", command)
+                    command => view.eval(format!("alert(\"Command not implemented: \\\"{}\\\"\")", command).as_str())?
                 }
             }
 
