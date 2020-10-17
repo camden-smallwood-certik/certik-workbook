@@ -113,7 +113,6 @@ impl HtmlElement {
     pub fn build<'a, T: 'a>(&self, view: &mut web_view::WebView<'a, T>) -> web_view::WVResult {
         let mut js = String::new();
         self.build_js(&mut js);
-
         view.eval(js.as_str())
     }
 
@@ -122,9 +121,9 @@ impl HtmlElement {
             js.push_str(
                 format!("var {} = {};", self.name,
                     if self.get {
-                        format!("document.getElementById('{}')", self.name)
+                        format!("document.getElementById('{}')", self.name.replace("'", "\\'").replace("\r\n", "\n").replace("\n", "\\n"))
                     } else {
-                        format!("document.createElement('{}')", self.class)
+                        format!("document.createElement('{}')", self.class.replace("'", "\\'").replace("\r\n", "\n").replace("\n", "\\n"))
                     }
                 ).as_str()
             );
@@ -136,15 +135,15 @@ impl HtmlElement {
         }
 
         if let Some(ref inner) = self.inner {
-            js.push_str(format!("{}.innerHTML = '{}';", self.name, inner).as_str());
+            js.push_str(format!("{}.innerHTML = '{}';", self.name, inner.replace("'", "\\'").replace("\r\n", "\n").replace("\n", "\\n")).as_str());
         }
 
         if let Some(ref text) = self.text {
-            js.push_str(format!("{}.text = '{}';", self.name, text).as_str());
+            js.push_str(format!("{}.text = '{}';", self.name, text.replace("'", "\\'").replace("\r\n", "\n").replace("\n", "\\n")).as_str());
         }
 
         if let Some(ref value) = self.value {
-            js.push_str(format!("{}.value = '{}';", self.name, value).as_str());
+            js.push_str(format!("{}.value = '{}';", self.name, value.replace("'", "\\'").replace("\r\n", "\n").replace("\n", "\\n")).as_str());
         }
 
         if let Some(true) = self.selected {
@@ -158,11 +157,11 @@ impl HtmlElement {
         }
 
         for attr in &self.attrs {
-            js.push_str(format!("{}.setAttribute('{}', '{}');", self.name, attr.0, attr.1).as_str());
+            js.push_str(format!("{}.setAttribute('{}', '{}');", self.name, attr.0.replace("'", "\\'").replace("\r\n", "\n").replace("\n", "\\n"), attr.1.replace("'", "\\'").replace("\r\n", "\n").replace("\n", "\\n")).as_str());
         }
 
         for field in &self.fields {
-            js.push_str(format!("{}.{} = \"{}\";", self.name, field.0, field.1).as_str());
+            js.push_str(format!("{}.{} = '{}';", self.name, field.0, field.1.replace("'", "\\'").replace("\r\n", "\n").replace("\n", "\\n")).as_str());
         }
 
         for (index, row) in self.rows.iter().enumerate() {

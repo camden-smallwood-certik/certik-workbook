@@ -47,6 +47,7 @@ fn main() {
                 "load_active_workbook" => load_active_workbook(view, &mut state)?,
                 "load_workbook" => load_workbook(view, &mut state)?,
                 "save_workbook" => save_workbook(view, &mut state)?,
+                "import_markdown" => import_markdown(view, &mut state)?,
                 "export_markdown" => export_markdown(view, &mut state)?,
                 "export_pdf" => export_pdf(view, &mut state)?,
                 "create_finding" => create_finding(view, &mut state)?,
@@ -141,6 +142,192 @@ fn clear_findings<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateDat
     state.current_finding_id = 0;
 
     Ok(())
+}
+
+fn import_markdown<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
+    if let Some(path) = tinyfiledialogs::open_file_dialog("Select a Markdown file", "*.md", None) {
+        match std::fs::read_to_string(path) {
+            Err(error) => {
+                return Err(web_view::Error::Custom(Box::new(error)))
+            }
+
+            Ok(md) => {
+
+                let arena = comrak::Arena::new();
+                let root = comrak::parse_document(&arena, md.as_str(), &comrak::ComrakOptions::default());
+                
+                let mut importer = MarkdownImporter {
+                    findings: vec![],
+                    current_finding: None,
+                    current_header: None,
+                    current_header_level: None
+                };
+
+                parse_markdown_ast_node(state, &mut importer, root);
+
+                for ref finding in importer.findings {
+                    assert!(state.findings.insert(finding.id, finding.clone()).is_none());
+                    add_finding(view, state, finding)?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+enum MarkdownHeader {
+    Description,
+    Recommendation,
+    Alleviation
+}
+
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+struct MarkdownImporter {
+    pub findings: Vec<Finding>,
+    pub current_finding: Option<Finding>,
+    pub current_header: Option<MarkdownHeader>,
+    pub current_header_level: Option<u32>,
+}
+
+fn parse_severity(input: &str) -> Option<report::Severity> {
+    match input.to_lowercase().as_str() {
+        "critical" => Some(report::Severity::Critical),
+        "major" => Some(report::Severity::Major),
+        "minor" => Some(report::Severity::Minor),
+        "informational" => Some(report::Severity::Informational),
+        _ => None
+    }
+}
+
+fn parse_markdown_ast_node<'a>(state: &mut StateData, importer: &mut MarkdownImporter, node: &'a comrak::nodes::AstNode<'a>) {
+    match &mut node.data.borrow_mut().value {
+        &mut comrak::nodes::NodeValue::HtmlBlock(ref mut block) => {
+            match std::str::from_utf8(block.literal.as_slice()).unwrap_or("") {
+                s if s.starts_with("<section id=\"") => {
+                    importer.current_finding = Some(report::Finding {
+                        id: { state.current_finding_id += 1; state.current_finding_id },
+                        title: String::new(),
+                        class: String::new(),
+                        severity: parse_severity(s.split('"').nth(1).unwrap()),
+                        location: String::new(),
+                        description: String::new(),
+                        recommendation: String::new(),
+                        alleviation: String::new()
+                    });
+                },
+
+                s if s.starts_with("</section>") => {
+                    importer.findings.push(importer.current_finding.clone().unwrap());
+                    importer.current_finding = None;
+                    importer.current_header = None;
+                    importer.current_header_level = None;
+                }
+
+                s => println!("Unknown html block: {}", s)
+            }
+        }
+
+        &mut comrak::nodes::NodeValue::Heading(ref mut heading) => {
+            assert!(importer.current_finding.is_some());
+            importer.current_header_level = Some(heading.level);
+        }
+
+        &mut comrak::nodes::NodeValue::Code(ref mut code) => {
+            assert!(importer.current_finding.is_some());
+            if let Some(header) = importer.current_header {
+                match header {
+                    MarkdownHeader::Description => if let Some(ref mut finding) = importer.current_finding {
+                        finding.description.push_str(format!("`{}`", std::str::from_utf8(code).unwrap()).as_str());
+                    }
+                    
+                    MarkdownHeader::Recommendation => if let Some(ref mut finding) = importer.current_finding {
+                        finding.recommendation.push_str(format!("`{}`", std::str::from_utf8(code).unwrap()).as_str());
+                    }
+                    
+                    MarkdownHeader::Alleviation => if let Some(ref mut finding) = importer.current_finding {
+                        finding.alleviation.push_str(format!("`{}`", std::str::from_utf8(code).unwrap()).as_str());
+                    }
+                }
+            }
+        }
+
+        &mut comrak::nodes::NodeValue::CodeBlock(ref mut code) => {
+            assert!(importer.current_finding.is_some());
+            if let Some(header) = importer.current_header {
+                match header {
+                    MarkdownHeader::Description => if let Some(ref mut finding) = importer.current_finding {
+                        finding.description.push_str(format!("\n\n```\n{}```", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str());
+                    }
+                    
+                    MarkdownHeader::Recommendation => if let Some(ref mut finding) = importer.current_finding {
+                        finding.recommendation.push_str(format!("\n\n```\n{}```", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str());
+                    }
+                    
+                    MarkdownHeader::Alleviation => if let Some(ref mut finding) = importer.current_finding {
+                        finding.alleviation.push_str(format!("\n\n```\n{}```", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str());
+                    }
+                }
+            }
+        }
+
+        &mut comrak::nodes::NodeValue::Text(ref mut text) => {
+            assert!(importer.current_finding.is_some());
+            if let Some(level) = importer.current_header_level {
+                match level {
+                    3 => if let Some(ref mut finding) = importer.current_finding {
+                        finding.title.push_str(std::str::from_utf8(text).unwrap());
+                        importer.current_header_level = None;
+                    }
+
+                    4 => match std::str::from_utf8(text).unwrap() {
+                        "Description:" => {
+                            importer.current_header = Some(MarkdownHeader::Description);
+                            importer.current_header_level = None;
+                        }
+
+                        "Recommendation:" => {
+                            importer.current_header = Some(MarkdownHeader::Recommendation);
+                            importer.current_header_level = None;
+                        }
+
+                        "Alleviation:" => {
+                            importer.current_header = Some(MarkdownHeader::Alleviation);
+                            importer.current_header_level = None;
+                        }
+
+                        _ => ()
+                    }
+
+                    _ => ()
+                }
+            } else {
+                if let Some(header) = importer.current_header {
+                    match header {
+                        MarkdownHeader::Description => if let Some(ref mut finding) = importer.current_finding {
+                            finding.description.push_str(std::str::from_utf8(text).unwrap());
+                        }
+                        
+                        MarkdownHeader::Recommendation => if let Some(ref mut finding) = importer.current_finding {
+                            finding.recommendation.push_str(std::str::from_utf8(text).unwrap());
+                        }
+                        
+                        MarkdownHeader::Alleviation => if let Some(ref mut finding) = importer.current_finding {
+                            finding.alleviation.push_str(std::str::from_utf8(text).unwrap());
+                        }
+                    }
+                } else {
+                    println!("Unused text: {}", std::str::from_utf8(text).unwrap());
+                }
+            }
+        }
+        _ => (),
+    }
+
+    for c in node.children() {
+        parse_markdown_ast_node(state, importer, c);
+    }
 }
 
 fn export_markdown<'a>(_: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
@@ -486,15 +673,26 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, ()>, _: &mut StateData, find
     // Create the text areas for the new finding
     //
 
+    let header_style = match finding.severity {
+        Some(report::Severity::Critical) => "color: rgb(230, 68, 60)",
+        Some(report::Severity::Major) => "color: rgb(249, 159, 28)",
+        Some(report::Severity::Minor) => "color: rgb(65, 91, 169)",
+        Some(report::Severity::Informational) => "color: rgb(85, 155, 74)",
+        None => "color: rgb(85, 84, 85)",
+    };
+
     let mut create_text_area = |name, text, string| {
-        let mut header = HtmlElement::new("h4", format!("{}_header", name).as_str());
+        let mut header = HtmlElement::new("h4", format!("finding{}_{}_header", finding.id, name).as_str());
         header.set_inner_html(text);
+        header.set_attribute("style", header_style);
+        header.set_attribute("id", format!("finding{}_{}_header", finding.id, name).as_str());
         new_cell.append_child(header);
     
         let mut textarea = HtmlElement::new("textarea", format!("finding{}_{}_textarea", finding.id, name).as_str());
         textarea.set_inner_html(string);
         textarea.set_attribute("rows", "4");
         textarea.set_attribute("cols", "80");
+        textarea.set_attribute("maxlength", "9999");
         textarea.set_field("style.resize", "vertical");
         textarea.set_attribute("id", format!("finding{}_{}", finding.id, name).as_str());
         textarea.set_attribute("onchange", format!("set_finding_value(\"{}\", {})", name, finding.id).as_str());
@@ -528,11 +726,14 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, ()>, _: &mut StateData, find
     let mut p = HtmlElement::new("p", "p");
     p.set_attribute("id", format!("finding{}_link_p", finding.id).as_str());
 
+    let mut link_id = HtmlElement::new("span", "link_id");
+    link_id.set_inner_html(format!("{}: ", finding.id).as_str());
+    p.append_child(link_id);
+
     let mut link = HtmlElement::new("a", "link");
     link.set_attribute("id", format!("finding{}_link", finding.id).as_str());
     link.set_attribute("href", format!("#finding{}", finding.id).as_str());
     link.set_inner_html(finding.title.as_str());
-
     p.append_child(link);
 
     toc_findings.append_child(p);
@@ -592,6 +793,26 @@ fn set_finding_severity<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut St
             "informational" => Some(report::Severity::Informational),
             _ => None
         };
+
+        let style = match entry.severity {
+            Some(report::Severity::Critical) => "color: rgb(230, 68, 60)",
+            Some(report::Severity::Major) => "color: rgb(249, 159, 28)",
+            Some(report::Severity::Minor) => "color: rgb(65, 91, 169)",
+            Some(report::Severity::Informational) => "color: rgb(85, 155, 74)",
+            None => "color: rgb(85, 84, 85)",
+        };
+
+        let mut description_header = HtmlElement::get(format!("finding{}_description_header", id).as_str());
+        description_header.set_attribute("style", style);
+        description_header.build(view)?;
+
+        let mut recommendation_header = HtmlElement::get(format!("finding{}_recommendation_header", id).as_str());
+        recommendation_header.set_attribute("style", style);
+        recommendation_header.build(view)?;
+
+        let mut alleviation_header = HtmlElement::get(format!("finding{}_alleviation_header", id).as_str());
+        alleviation_header.set_attribute("style", style);
+        alleviation_header.build(view)?;
 
         let mut option = HtmlElement::get(format!("finding{}_severity_{}_option", id, severity).as_str());
         option.set_selected(true);
