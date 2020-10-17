@@ -37,78 +37,76 @@ fn main() {
         .user_data(())
         .invoke_handler(|view, arg| {
             println!("Command: {}", arg);
-            if arg.contains(' ') {
-                // Tokenize the input command and parameters
-                let mut is_string = false;
-                let mut tokens = vec![];
-                let mut token = String::new();
+            
+            // Tokenize the input command and parameters
+            let tokens = tokenize_command_string(arg);
+            let mut iter = tokens.iter();
 
-                // Create an iterator to loop over each character
-                let mut iter = arg.chars();
-
-                // Build each token using the character iterator
-                while let Some(c) = iter.next() {
-                    if c.is_whitespace() {
-                        if is_string {
-                            // Push all whitespace characters inside a string to the token
-                            token.push(c);
-                        } else if token.len() != 0 {
-                            // Push the current token to the vector if token is not empty
-                            tokens.push(token.replace("''", "\""));
-                            token = String::new();
-                        }
-                    } else if c == '"' {
-                        // Flip string mode
-                        is_string = !is_string;
-                    } else {
-                        // Push the character to the token
-                        token.push(c);
-                    }
-                }
-
-                // Push the last token (if any)
-                if token.len() != 0 {
-                    tokens.push(token.replace("''", "\""));
-                }
-
-                // Create an iterator to loop over the tokens
-                let mut iter = tokens.iter();
-
-                // Handle the input command
-                match iter.next().unwrap().as_str() {
-                    "copy_finding" => copy_finding(view, &mut state, iter.next().unwrap().parse().unwrap())?,
-                    "remove_finding" => remove_finding(view, &mut state, iter.next().unwrap().parse().unwrap())?,
-                    "set_finding_title" => set_finding_title(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
-                    "set_finding_type" => set_finding_type(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
-                    "set_finding_severity" => set_finding_severity(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
-                    "set_finding_location" => set_finding_location(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
-                    "set_finding_description" => set_finding_description(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
-                    "set_finding_recommendation" => set_finding_recommendation(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
-                    "set_finding_alleviation" => set_finding_alleviation(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
-                    command => view.eval(format!("alert(\"Command not implemented: '{}'\")", command).as_str())?
-                }
-
-                // Verify all parameters were used
-                assert!(iter.next().is_none());
-            } else {
-                // Handle the input command
-                match arg {
-                    "create_finding" => create_finding(view, &mut state)?,
-                    "paste_finding" => paste_finding(view, &mut state)?,
-                    "clear_findings" => clear_findings(view, &mut state)?,
-                    "export_markdown" => export_markdown(view, &mut state)?,
-                    "export_pdf" => export_pdf(view, &mut state)?,
-                    "load_active_workbook" => load_active_workbook(view, &mut state)?,
-                    "load_workbook" => load_workbook(view, &mut state)?,
-                    "save_workbook" => save_workbook(view, &mut state)?,
-                    command => view.eval(format!("alert(\"Command not implemented: \\\"{}\\\"\")", command).as_str())?
-                }
+            // Handle the input command
+            match iter.next().unwrap().as_str() {
+                "load_active_workbook" => load_active_workbook(view, &mut state)?,
+                "load_workbook" => load_workbook(view, &mut state)?,
+                "save_workbook" => save_workbook(view, &mut state)?,
+                "export_markdown" => export_markdown(view, &mut state)?,
+                "export_pdf" => export_pdf(view, &mut state)?,
+                "create_finding" => create_finding(view, &mut state)?,
+                "copy_finding" => copy_finding(view, &mut state, iter.next().unwrap().parse().unwrap())?,
+                "paste_finding" => paste_finding(view, &mut state)?,
+                "remove_finding" => remove_finding(view, &mut state, iter.next().unwrap().parse().unwrap())?,
+                "clear_findings" => clear_findings(view, &mut state)?,
+                "set_finding_title" => set_finding_title(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                "set_finding_type" => set_finding_type(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                "set_finding_severity" => set_finding_severity(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                "set_finding_location" => set_finding_location(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                "set_finding_description" => set_finding_description(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                "set_finding_recommendation" => set_finding_recommendation(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                "set_finding_alleviation" => set_finding_alleviation(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                command => view.eval(format!("alert(\"Command not implemented: '{}'\")", command).as_str())?
             }
+
+            // Verify all parameters were used
+            assert!(iter.next().is_none());
 
             Ok(())
         })
         .run()
         .unwrap();
+}
+
+fn tokenize_command_string(string: &str) -> Vec<String> {
+    let mut is_string = false;
+    let mut tokens = vec![];
+    let mut token = String::new();
+
+    // Create an iterator to loop over each character
+    let mut iter = string.chars();
+
+    // Build each token using the character iterator
+    while let Some(c) = iter.next() {
+        if c.is_whitespace() {
+            if is_string {
+                // Push all whitespace characters inside a string to the token
+                token.push(c);
+            } else if token.len() != 0 {
+                // Push the current token to the vector if token is not empty
+                tokens.push(token.replace("''", "\""));
+                token = String::new();
+            }
+        } else if c == '"' {
+            // Flip string mode
+            is_string = !is_string;
+        } else {
+            // Push the character to the token
+            token.push(c);
+        }
+    }
+
+    // Push the last token (if any)
+    if token.len() != 0 {
+        tokens.push(token.replace("''", "\""));
+    }
+
+    tokens
 }
 
 fn create_finding<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
