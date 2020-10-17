@@ -97,6 +97,7 @@ fn main() {
                     "paste_finding" => paste_finding(view, &mut state)?,
                     "clear_findings" => clear_findings(view, &mut state)?,
                     "export_markdown" => export_markdown(view, &mut state)?,
+                    "export_pdf" => export_pdf(view, &mut state)?,
                     "load_active_workbook" => load_active_workbook(view, &mut state)?,
                     "load_workbook" => load_workbook(view, &mut state)?,
                     "save_workbook" => save_workbook(view, &mut state)?,
@@ -195,6 +196,10 @@ fn export_markdown<'a>(_: &mut web_view::WebView<'a, ()>, state: &mut StateData)
     }
 
     Ok(())
+}
+
+fn export_pdf<'a>(view: &mut web_view::WebView<'a, ()>, _: &mut StateData) -> web_view::WVResult {
+    view.eval("alert('PDF exporting is not currently supported')")
 }
 
 fn load_active_workbook<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
