@@ -421,6 +421,7 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Findin
         textarea.set_inner_html(string);
         textarea.set_attribute("rows", "4");
         textarea.set_attribute("cols", "80");
+        textarea.set_field("style.resize", "vertical");
         textarea.set_attribute("id", format!("finding{}_{}", finding.id, name).as_str());
         textarea.set_attribute("onchange", format!("set_finding_value(\"{}\", {})", name, finding.id).as_str());
         new_cell.append_child(textarea);

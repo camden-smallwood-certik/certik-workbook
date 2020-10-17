@@ -12,6 +12,7 @@ pub struct HtmlElement {
     pub selected: Option<bool>,
     pub selected_index: Option<usize>,
     pub attrs: HashMap<String, String>,
+    pub fields: HashMap<String, String>,
     pub rows: Vec<HtmlElement>,
     pub cells: Vec<HtmlElement>,
     pub children: Vec<HtmlElement>,
@@ -30,6 +31,7 @@ impl HtmlElement {
             selected: None,
             selected_index: None,
             attrs: HashMap::new(),
+            fields: HashMap::new(),
             rows: vec![],
             cells: vec![],
             children: vec![],
@@ -48,6 +50,7 @@ impl HtmlElement {
             selected: None,
             selected_index: None,
             attrs: HashMap::new(),
+            fields: HashMap::new(),
             rows: vec![],
             cells: vec![],
             children: vec![],
@@ -60,6 +63,10 @@ impl HtmlElement {
 
     pub fn set_attribute(&mut self, name: &str, value: &str) {
         let _ = self.attrs.insert(name.to_string(), value.to_string());
+    }
+
+    pub fn set_field(&mut self, name: &str, value: &str) {
+        let _ = self.fields.insert(name.to_string(), value.to_string());
     }
 
     pub fn insert_row(&mut self, index: usize, name: &str) -> &mut HtmlElement {
@@ -143,6 +150,10 @@ impl HtmlElement {
 
         for attr in &self.attrs {
             js.push_str(format!("{}.setAttribute('{}', '{}');", self.name, attr.0, attr.1).as_str());
+        }
+
+        for field in &self.fields {
+            js.push_str(format!("{}.{} = \"{}\";", self.name, field.0, field.1).as_str());
         }
 
         for (index, row) in self.rows.iter().enumerate() {
