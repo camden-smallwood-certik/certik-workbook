@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate serde_derive;
 
+pub mod command;
 pub mod html;
 pub mod report;
 
@@ -19,11 +20,13 @@ pub struct StateData {
 }
 
 fn main() {
-    //
-    // TODO: load workbook file here
-    //
-
     let html = include_str!("../html/index.html");
+
+    let mut state = StateData {
+        current_finding_id: 0,
+        findings: HashMap::new(),
+        copied_finding: None
+    };
 
     web_view::builder()
         .title("CertiK Workbook")
@@ -31,13 +34,7 @@ fn main() {
         .size(1024, 640)
         .resizable(true)
         .debug(true)
-        .user_data(
-            StateData {
-                current_finding_id: 0,
-                findings: HashMap::new(),
-                copied_finding: None
-            }
-        )
+        .user_data(())
         .invoke_handler(|view, arg| {
             println!("Command: {}", arg);
             if arg.contains(' ') {
@@ -57,7 +54,7 @@ fn main() {
                             token.push(c);
                         } else if token.len() != 0 {
                             // Push the current token to the vector if token is not empty
-                            tokens.push(token);
+                            tokens.push(token.replace("''", "\""));
                             token = String::new();
                         }
                     } else if c == '"' {
@@ -71,7 +68,7 @@ fn main() {
 
                 // Push the last token (if any)
                 if token.len() != 0 {
-                    tokens.push(token);
+                    tokens.push(token.replace("''", "\""));
                 }
 
                 // Create an iterator to loop over the tokens
@@ -79,15 +76,15 @@ fn main() {
 
                 // Handle the input command
                 match iter.next().unwrap().as_str() {
-                    "copy_finding" => copy_finding(view, iter.next().unwrap().parse().unwrap())?,
-                    "remove_finding" => remove_finding(view, iter.next().unwrap().parse().unwrap())?,
-                    "set_finding_title" => set_finding_title(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
-                    "set_finding_type" => set_finding_type(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
-                    "set_finding_severity" => set_finding_severity(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
-                    "set_finding_location" => set_finding_location(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
-                    "set_finding_description" => set_finding_description(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
-                    "set_finding_recommendation" => set_finding_recommendation(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
-                    "set_finding_alleviation" => set_finding_alleviation(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                    "copy_finding" => copy_finding(view, &mut state, iter.next().unwrap().parse().unwrap())?,
+                    "remove_finding" => remove_finding(view, &mut state, iter.next().unwrap().parse().unwrap())?,
+                    "set_finding_title" => set_finding_title(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                    "set_finding_type" => set_finding_type(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                    "set_finding_severity" => set_finding_severity(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                    "set_finding_location" => set_finding_location(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                    "set_finding_description" => set_finding_description(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                    "set_finding_recommendation" => set_finding_recommendation(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
+                    "set_finding_alleviation" => set_finding_alleviation(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
                     command => view.eval(format!("alert(\"Command not implemented: '{}'\")", command).as_str())?
                 }
 
@@ -96,11 +93,13 @@ fn main() {
             } else {
                 // Handle the input command
                 match arg {
-                    "create_finding" => create_finding(view)?,
-                    "clear_findings" => clear_findings(view)?,
-                    "export_markdown" => export_markdown(view)?,
-                    "load_workbook" => load_workbook(view)?,
-                    "save_workbook" => save_workbook(view)?,
+                    "create_finding" => create_finding(view, &mut state)?,
+                    "paste_finding" => paste_finding(view, &mut state)?,
+                    "clear_findings" => clear_findings(view, &mut state)?,
+                    "export_markdown" => export_markdown(view, &mut state)?,
+                    "load_active_workbook" => load_active_workbook(view, &mut state)?,
+                    "load_workbook" => load_workbook(view, &mut state)?,
+                    "save_workbook" => save_workbook(view, &mut state)?,
                     command => view.eval(format!("alert(\"Command not implemented: \\\"{}\\\"\")", command).as_str())?
                 }
             }
@@ -111,8 +110,7 @@ fn main() {
         .unwrap();
 }
 
-fn create_finding<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::WVResult {
-    let state = view.user_data_mut();
+fn create_finding<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
     state.current_finding_id += 1;
 
     let finding = Finding {
@@ -126,26 +124,27 @@ fn create_finding<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::
         alleviation: String::new()
     };
 
-    add_finding(view, &finding)
+    assert!(state.findings.insert(finding.id, finding.clone()).is_none());
+    add_finding(view, state, &finding)
 }
 
-fn clear_findings<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::WVResult {
+fn clear_findings<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
     let mut ids = vec![];
 
-    for id in view.user_data().findings.keys() {
+    for id in state.findings.keys() {
         ids.push(*id);
     }
 
     for id in ids {
-        remove_finding(view, id)?;
+        remove_finding(view, state, id)?;
     }
 
-    view.user_data_mut().current_finding_id = 0;
+    state.current_finding_id = 0;
 
     Ok(())
 }
 
-fn export_markdown<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::WVResult {
+fn export_markdown<'a>(_: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
     if let Some(path) = tinyfiledialogs::save_file_dialog("Select a Markdown file", "workbook.md") {
         use std::{fs::File, io::Write};
 
@@ -156,7 +155,7 @@ fn export_markdown<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view:
 
         let mut md = String::new();
 
-        for finding in view.user_data().findings.values() {
+        for finding in state.findings.values() {
             let severity = match finding.severity.unwrap() {
                 report::Severity::Critical => "Critical",
                 report::Severity::Major => "Major",
@@ -198,7 +197,23 @@ fn export_markdown<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view:
     Ok(())
 }
 
-fn load_workbook<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::WVResult {
+fn load_active_workbook<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
+    let mut findings = vec![];
+    
+    for finding in state.findings.values() {
+        findings.push(finding.clone());
+    }
+
+    findings.sort_by(|a, b| a.id.cmp(&b.id));
+
+    for ref finding in findings {
+        add_finding(view, state, finding)?;
+    }
+
+    Ok(())
+}
+
+fn load_workbook<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
     if let Some(path) = tinyfiledialogs::open_file_dialog("Select a JSON workbook", "workbook.json", None) {
         use std::fs;
 
@@ -214,14 +229,15 @@ fn load_workbook<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::W
                     }
 
                     Ok(report::Report { mut findings, .. }) => {
-                        clear_findings(view)?;
+                        clear_findings(view, state)?;
                         
                         findings.sort_by(|lhs, rhs| lhs.id.cmp(&rhs.id));
 
-                        view.user_data_mut().current_finding_id = findings.len();
+                        state.current_finding_id = findings.len();
                         
                         for (_, finding) in findings.iter().enumerate() {
-                            add_finding(view, &finding)?;
+                            assert!(state.findings.insert(finding.id, finding.clone()).is_none());                        
+                            add_finding(view, state, &finding)?;
                         }
                     }
                 }
@@ -232,7 +248,7 @@ fn load_workbook<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::W
     Ok(())
 }
 
-fn save_workbook<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::WVResult {
+fn save_workbook<'a>(_: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
     if let Some(path) = tinyfiledialogs::save_file_dialog("Select a JSON workbook", "workbook.json") {
         use std::{fs::File, io::Write};
 
@@ -257,7 +273,7 @@ fn save_workbook<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::W
             findings: vec![]
         };
 
-        for (_, finding) in &view.user_data().findings {
+        for (_, finding) in &state.findings {
             report.findings.push(finding.clone());
         }
 
@@ -277,7 +293,27 @@ fn save_workbook<'a>(view: &mut web_view::WebView<'a, StateData>) -> web_view::W
     Ok(())
 }
 
-fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Finding) -> web_view::WVResult {
+fn copy_finding<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize) -> web_view::WVResult {
+    if let Some(finding) = state.findings.get(&id) {
+        state.copied_finding = Some(finding.clone());
+        let mut paste_button = html::HtmlElement::get("paste_button");
+        paste_button.set_disabled(false);
+        paste_button.build(view)
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
+    }
+}
+
+fn paste_finding<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
+    let mut finding = state.copied_finding.clone().unwrap();
+    state.current_finding_id += 1;
+    finding.id = state.current_finding_id;
+    add_finding(view, state, &finding)?;
+    assert!(state.findings.insert(finding.id, finding).is_none());
+    Ok(())
+}
+
+fn add_finding<'a>(view: &mut web_view::WebView<'a, ()>, _: &mut StateData, finding: &Finding) -> web_view::WVResult {
     //
     // Create a new finding table
     //
@@ -475,8 +511,6 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Findin
     let mut findings = HtmlElement::get("findings");
     findings.append_child(new_table);
 
-    assert!(view.user_data_mut().findings.insert(finding.id, finding.clone()).is_none());
-
     findings.build(view)?;
 
     // Jump to the new finding
@@ -502,18 +536,9 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Findin
     toc_findings.build(view)
 }
 
-fn copy_finding<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize) -> web_view::WVResult {
-    if let Some(finding) = view.user_data_mut().findings.get(&id) {
-        view.user_data_mut().copied_finding = Some(finding.clone());
-        Ok(())
-    } else {
-        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
-    }
-}
-
-fn remove_finding<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize) -> web_view::WVResult {
-    if view.user_data_mut().findings.remove(&id).is_some() {
-        let _ = view.user_data_mut().findings.remove(&id);
+fn remove_finding<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize) -> web_view::WVResult {
+    if state.findings.remove(&id).is_some() {
+        let _ = state.findings.remove(&id);
 
         let mut finding = HtmlElement::get(format!("finding{}", id).as_str());
         finding.remove();
@@ -527,8 +552,8 @@ fn remove_finding<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize) ->
     }
 }
 
-fn set_finding_title<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize, title: &str) -> web_view::WVResult {
-    if let Some(entry) = view.user_data_mut().findings.get_mut(&id) {
+fn set_finding_title<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, title: &str) -> web_view::WVResult {
+    if let Some(entry) = state.findings.get_mut(&id) {
         entry.title = title.to_string();
 
         let mut finding_link = HtmlElement::get(format!("finding{}_link", id).as_str());
@@ -543,8 +568,8 @@ fn set_finding_title<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize,
     }
 }
 
-fn set_finding_type<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize, class: &str) -> web_view::WVResult {
-    if let Some(entry) = view.user_data_mut().findings.get_mut(&id) {
+fn set_finding_type<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, class: &str) -> web_view::WVResult {
+    if let Some(entry) = state.findings.get_mut(&id) {
         entry.class = class.to_string();
 
         let mut finding_type = HtmlElement::get(format!("finding{}_type", id).as_str());
@@ -555,8 +580,8 @@ fn set_finding_type<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize, 
     }
 }
 
-fn set_finding_severity<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize, severity: &str) -> web_view::WVResult {
-    if let Some(entry) = view.user_data_mut().findings.get_mut(&id) {
+fn set_finding_severity<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, severity: &str) -> web_view::WVResult {
+    if let Some(entry) = state.findings.get_mut(&id) {
         entry.severity = match severity {
             "critical" => Some(report::Severity::Critical),
             "major" => Some(report::Severity::Major),
@@ -573,8 +598,8 @@ fn set_finding_severity<'a>(view: &mut web_view::WebView<'a, StateData>, id: usi
     }
 }
 
-fn set_finding_location<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize, location: &str) -> web_view::WVResult {
-    if let Some(entry) = view.user_data_mut().findings.get_mut(&id) {
+fn set_finding_location<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, location: &str) -> web_view::WVResult {
+    if let Some(entry) = state.findings.get_mut(&id) {
         entry.location = location.to_string();
 
         let mut finding_location = HtmlElement::get(format!("finding{}_location", id).as_str());
@@ -585,8 +610,8 @@ fn set_finding_location<'a>(view: &mut web_view::WebView<'a, StateData>, id: usi
     }
 }
 
-fn set_finding_description<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize, description: &str) -> web_view::WVResult {
-    if let Some(entry) = view.user_data_mut().findings.get_mut(&id) {
+fn set_finding_description<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, description: &str) -> web_view::WVResult {
+    if let Some(entry) = state.findings.get_mut(&id) {
         entry.description = description.to_string();
 
         let mut finding_description = HtmlElement::get(format!("finding{}_description", id).as_str());
@@ -597,8 +622,8 @@ fn set_finding_description<'a>(view: &mut web_view::WebView<'a, StateData>, id: 
     }
 }
 
-fn set_finding_recommendation<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize, recommendation: &str) -> web_view::WVResult {
-    if let Some(entry) = view.user_data_mut().findings.get_mut(&id) {
+fn set_finding_recommendation<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, recommendation: &str) -> web_view::WVResult {
+    if let Some(entry) = state.findings.get_mut(&id) {
         entry.recommendation = recommendation.to_string();
 
         let mut finding_recommendation = HtmlElement::get(format!("finding{}_recommendation", id).as_str());
@@ -609,8 +634,8 @@ fn set_finding_recommendation<'a>(view: &mut web_view::WebView<'a, StateData>, i
     }
 }
 
-fn set_finding_alleviation<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize, alleviation: &str) -> web_view::WVResult {
-    if let Some(entry) = view.user_data_mut().findings.get_mut(&id) {
+fn set_finding_alleviation<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, alleviation: &str) -> web_view::WVResult {
+    if let Some(entry) = state.findings.get_mut(&id) {
         entry.alleviation = alleviation.to_string();
 
         let mut finding_alleviation = HtmlElement::get(format!("finding{}_alleviation", id).as_str());

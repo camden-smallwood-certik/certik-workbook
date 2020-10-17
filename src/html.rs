@@ -4,6 +4,7 @@ use std::collections::HashMap;
 pub struct HtmlElement {
     pub get: bool,
     pub remove: bool,
+    pub disabled: Option<bool>,
     pub class: String,
     pub name: String,
     pub inner: Option<String>,
@@ -23,6 +24,7 @@ impl HtmlElement {
         Self {
             get: false,
             remove: false,
+            disabled: None,
             class: class.to_string(),
             name: name.to_string(),
             inner: None,
@@ -42,6 +44,7 @@ impl HtmlElement {
         Self {
             get: true,
             remove: false,
+            disabled: None,
             class: "".to_string(),
             name: name.to_string(),
             inner: None,
@@ -89,6 +92,10 @@ impl HtmlElement {
 
     pub fn set_value(&mut self, value: &str) {
         self.value = Some(value.to_string());
+    }
+
+    pub fn set_disabled(&mut self, disabled: bool) {
+        self.disabled = Some(disabled);
     }
 
     pub fn set_selected(&mut self, selected: bool) {
@@ -140,12 +147,14 @@ impl HtmlElement {
             js.push_str(format!("{}.value = '{}';", self.name, value).as_str());
         }
 
-        if let Some(ref value) = self.value {
-            js.push_str(format!("{}.value = '{}';", self.name, value).as_str());
-        }
-
         if let Some(true) = self.selected {
             js.push_str(format!("{}.selected = true;", self.name).as_str());
+        }
+
+        match self.disabled {
+            Some(true) => js.push_str(format!("{}.disabled = true;", self.name).as_str()),
+            Some(false) => js.push_str(format!("{}.disabled = false;", self.name).as_str()),
+            None => ()
         }
 
         for attr in &self.attrs {
