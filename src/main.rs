@@ -14,7 +14,8 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub struct StateData {
     pub current_finding_id: usize,
-    pub findings: HashMap<usize, Finding>
+    pub findings: HashMap<usize, Finding>,
+    pub copied_finding: Option<Finding>
 }
 
 fn main() {
@@ -33,7 +34,8 @@ fn main() {
         .user_data(
             StateData {
                 current_finding_id: 0,
-                findings: HashMap::new()
+                findings: HashMap::new(),
+                copied_finding: None
             }
         )
         .invoke_handler(|view, arg| {
@@ -77,6 +79,7 @@ fn main() {
 
                 // Handle the input command
                 match iter.next().unwrap().as_str() {
+                    "copy_finding" => copy_finding(view, iter.next().unwrap().parse().unwrap())?,
                     "remove_finding" => remove_finding(view, iter.next().unwrap().parse().unwrap())?,
                     "set_finding_title" => set_finding_title(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
                     "set_finding_type" => set_finding_type(view, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
@@ -286,38 +289,70 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Findin
     let new_cell = new_row.insert_cell(0, "new_cell");
 
     //
+    // Create the toolbar table for the new finding
+    //
+
+    let mut toolbar_table = HtmlElement::new("table", "toolbar_table");
+    toolbar_table.set_attribute("style", "table-layout: fixed; width: 100%");
+
+    let toolbar_row = toolbar_table.insert_row(0, "toolbar_row");
+    
+    let toolbar_cell = toolbar_row.insert_cell(0, "toolbar_cell");
+
+    // ---------------------------------------------------
+
+    let mut toolbar_close_button = HtmlElement::new("button", "toolbar_close_button");
+    toolbar_close_button.set_attribute("onclick", format!("external.invoke(\"remove_finding {}\")", finding.id).as_str());
+    toolbar_close_button.set_inner_html("X");
+    
+    toolbar_cell.append_child(toolbar_close_button);
+
+    // ---------------------------------------------------
+
+    let mut toolbar_copy_button = HtmlElement::new("button", "toolbar_copy_button");
+    toolbar_copy_button.set_attribute("onclick", format!("external.invoke(\"copy_finding {}\")", finding.id).as_str());
+    toolbar_copy_button.set_inner_html("Copy");
+
+    toolbar_cell.append_child(toolbar_copy_button);
+
+    // ---------------------------------------------------
+
+    new_cell.append_child(toolbar_table);
+
+    //
     // Create the title table for the new finding
     //
 
     let mut title_table = HtmlElement::new("table", "title_table");
-    title_table.set_attribute("style", "table-layout: auto");
+    title_table.set_attribute("style", "width: 100%");
 
     let title_row = title_table.insert_row(0, "title_row");
 
     // ---------------------------------------------------
 
-    let title_close_cell = title_row.insert_cell(0, "title_close_cell");
-
-    let mut title_close_button = HtmlElement::new("button", "title_close_button");
-    title_close_button.set_attribute("onclick", format!("external.invoke(\"remove_finding {}\")", finding.id).as_str());
-    title_close_button.set_inner_html("X");
-
-    title_close_cell.append_child(title_close_button);
+    let title_image_cell = title_row.insert_cell(0, "title_image_cell");
+    title_image_cell.set_attribute("style", "vertical-align: middle");
+    
+    let mut title_image = HtmlElement::new("img", "title_image");
+    title_image.set_attribute("src", "https://svgshare.com/i/QKR.svg");
+    title_image.set_attribute("style", "width: 40px; height: auto");
+    
+    title_image_cell.append_child(title_image);
 
     // ---------------------------------------------------
 
     let title_text_cell = title_row.insert_cell(1, "title_text_cell");
-
+    title_text_cell.set_attribute("style", "width: 100%; vertical-align: middle");
+    
     let mut title_text_input = HtmlElement::new("input", "title_text_input");
     title_text_input.set_attribute("type", "text");
     title_text_input.set_attribute("id", format!("finding{}_title", finding.id).as_str());
     title_text_input.set_attribute("value", finding.title.as_str());
-    title_text_input.set_attribute("style", "font-size: 150%");
-    title_text_input.set_attribute("size", "80");
+    title_text_input.set_attribute("style", "font-size: 1.5rem");
     title_text_input.set_attribute("onchange", format!("set_finding_value(\"title\", {})", finding.id).as_str());
     
     title_text_cell.append_child(title_text_input);
-
+    
     // ---------------------------------------------------
 
     new_cell.append_child(title_table);
@@ -465,6 +500,15 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, StateData>, finding: &Findin
 
     toc_findings.append_child(p);
     toc_findings.build(view)
+}
+
+fn copy_finding<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize) -> web_view::WVResult {
+    if let Some(finding) = view.user_data_mut().findings.get(&id) {
+        view.user_data_mut().copied_finding = Some(finding.clone());
+        Ok(())
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
+    }
 }
 
 fn remove_finding<'a>(view: &mut web_view::WebView<'a, StateData>, id: usize) -> web_view::WVResult {
