@@ -3,6 +3,7 @@ extern crate serde_derive;
 
 pub mod command;
 pub mod html;
+pub mod markdown;
 pub mod report;
 
 use crate::{
@@ -110,36 +111,98 @@ fn tokenize_command_string(string: &str) -> Vec<String> {
     tokens
 }
 
-fn create_finding<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
-    state.current_finding_id += 1;
+fn load_active_workbook<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
+    let mut findings = vec![];
+    
+    for finding in state.findings.values() {
+        findings.push(finding.clone());
+    }
 
-    let finding = Finding {
-        id: state.current_finding_id,
-        title: format!("Finding{}", state.current_finding_id),
-        class: String::new(),
-        severity: None,
-        location: String::new(),
-        description: String::new(),
-        recommendation: String::new(),
-        alleviation: String::new()
-    };
+    findings.sort_by(|a, b| a.id.cmp(&b.id));
 
-    assert!(state.findings.insert(finding.id, finding.clone()).is_none());
-    add_finding(view, state, &finding)
+    for ref finding in findings {
+        add_finding_to_web_view(view, state, finding)?;
+    }
+
+    Ok(())
 }
 
-fn clear_findings<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
-    let mut ids = vec![];
+fn load_workbook<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
+    if let Some(path) = tinyfiledialogs::open_file_dialog("Select a JSON workbook", "workbook.json", None) {
+        use std::fs;
 
-    for id in state.findings.keys() {
-        ids.push(*id);
+        match fs::read_to_string(path) {
+            Err(error) => {
+                return Err(web_view::Error::Custom(Box::new(error)))
+            }
+
+            Ok(json) => {
+                match serde_json::from_str(json.as_str()) {
+                    Err(error) => {
+                        return Err(web_view::Error::Custom(Box::new(error)))
+                    }
+
+                    Ok(report::Report { mut findings, .. }) => {
+                        clear_findings(view, state)?;
+                        
+                        findings.sort_by(|lhs, rhs| lhs.id.cmp(&rhs.id));
+
+                        state.current_finding_id = findings.len();
+                        
+                        for (_, finding) in findings.iter().enumerate() {
+                            assert!(state.findings.insert(finding.id, finding.clone()).is_none());                        
+                            add_finding_to_web_view(view, state, &finding)?;
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    for id in ids {
-        remove_finding(view, state, id)?;
-    }
+    Ok(())
+}
 
-    state.current_finding_id = 0;
+fn save_workbook<'a>(_: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
+    if let Some(path) = tinyfiledialogs::save_file_dialog("Select a JSON workbook", "workbook.json") {
+        use std::{fs::File, io::Write};
+
+        let mut file = match File::create(path) {
+            Err(error) => return Err(web_view::Error::Custom(Box::new(error))),
+            Ok(file) => file
+        };
+
+        let mut report = report::Report {
+            title: "Report Title".to_string(),
+            auditors: vec![
+                report::Auditor {
+                    name: "Camden Smallwood".to_string(),
+                    email: "camden.smallwood@certik.org".to_string()
+                }
+            ],
+            start_time: "Oct. 12, 2020".to_string(),
+            delivery_time: "Oct. 19, 2020".to_string(),
+            repository: "Repository URL".to_string(),
+            commit_hashes: vec!["Commit Hash 1".to_string(), "Commit Hash 2".to_string()],
+            overview: "Executive Overview".to_string(),
+            findings: vec![]
+        };
+
+        for (_, finding) in &state.findings {
+            report.findings.push(finding.clone());
+        }
+
+        match serde_json::to_string(&report) {
+            Err(error) => {
+                return Err(web_view::Error::Custom(Box::new(error)))
+            }
+
+            Ok(json) => {
+                if let Err(error) = file.write_all(json.as_bytes()) {
+                    return Err(web_view::Error::Custom(Box::new(error)))
+                }
+            }
+        }
+    }
 
     Ok(())
 }
@@ -156,178 +219,18 @@ fn import_markdown<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateDa
                 let arena = comrak::Arena::new();
                 let root = comrak::parse_document(&arena, md.as_str(), &comrak::ComrakOptions::default());
                 
-                let mut importer = MarkdownImporter {
-                    findings: vec![],
-                    current_finding: None,
-                    current_header: None,
-                    current_header_level: None
-                };
+                let mut parser = markdown::MarkdownParser::new();
+                parser.parse_ast_node(state, root);
 
-                parse_markdown_ast_node(state, &mut importer, root);
-
-                for ref finding in importer.findings {
+                for ref finding in parser.findings {
                     assert!(state.findings.insert(finding.id, finding.clone()).is_none());
-                    add_finding(view, state, finding)?;
+                    add_finding_to_web_view(view, state, finding)?;
                 }
             }
         }
     }
 
     Ok(())
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
-enum MarkdownHeader {
-    Description,
-    Recommendation,
-    Alleviation
-}
-
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
-struct MarkdownImporter {
-    pub findings: Vec<Finding>,
-    pub current_finding: Option<Finding>,
-    pub current_header: Option<MarkdownHeader>,
-    pub current_header_level: Option<u32>,
-}
-
-fn parse_severity(input: &str) -> Option<report::Severity> {
-    match input.to_lowercase().as_str() {
-        "critical" => Some(report::Severity::Critical),
-        "major" => Some(report::Severity::Major),
-        "minor" => Some(report::Severity::Minor),
-        "informational" => Some(report::Severity::Informational),
-        _ => None
-    }
-}
-
-fn parse_markdown_ast_node<'a>(state: &mut StateData, importer: &mut MarkdownImporter, node: &'a comrak::nodes::AstNode<'a>) {
-    match &mut node.data.borrow_mut().value {
-        &mut comrak::nodes::NodeValue::HtmlBlock(ref mut block) => {
-            match std::str::from_utf8(block.literal.as_slice()).unwrap_or("") {
-                s if s.starts_with("<section id=\"") => {
-                    importer.current_finding = Some(report::Finding {
-                        id: { state.current_finding_id += 1; state.current_finding_id },
-                        title: String::new(),
-                        class: String::new(),
-                        severity: parse_severity(s.split('"').nth(1).unwrap()),
-                        location: String::new(),
-                        description: String::new(),
-                        recommendation: String::new(),
-                        alleviation: String::new()
-                    });
-                },
-
-                s if s.starts_with("</section>") => {
-                    importer.findings.push(importer.current_finding.clone().unwrap());
-                    importer.current_finding = None;
-                    importer.current_header = None;
-                    importer.current_header_level = None;
-                }
-
-                s => println!("Unknown html block: {}", s)
-            }
-        }
-
-        &mut comrak::nodes::NodeValue::Heading(ref mut heading) => {
-            assert!(importer.current_finding.is_some());
-            importer.current_header_level = Some(heading.level);
-        }
-
-        &mut comrak::nodes::NodeValue::Code(ref mut code) => {
-            assert!(importer.current_finding.is_some());
-            if let Some(header) = importer.current_header {
-                match header {
-                    MarkdownHeader::Description => if let Some(ref mut finding) = importer.current_finding {
-                        finding.description.push_str(format!("`{}`", std::str::from_utf8(code).unwrap()).as_str());
-                    }
-                    
-                    MarkdownHeader::Recommendation => if let Some(ref mut finding) = importer.current_finding {
-                        finding.recommendation.push_str(format!("`{}`", std::str::from_utf8(code).unwrap()).as_str());
-                    }
-                    
-                    MarkdownHeader::Alleviation => if let Some(ref mut finding) = importer.current_finding {
-                        finding.alleviation.push_str(format!("`{}`", std::str::from_utf8(code).unwrap()).as_str());
-                    }
-                }
-            }
-        }
-
-        &mut comrak::nodes::NodeValue::CodeBlock(ref mut code) => {
-            assert!(importer.current_finding.is_some());
-            if let Some(header) = importer.current_header {
-                match header {
-                    MarkdownHeader::Description => if let Some(ref mut finding) = importer.current_finding {
-                        finding.description.push_str(format!("\n\n```\n{}```", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str());
-                    }
-                    
-                    MarkdownHeader::Recommendation => if let Some(ref mut finding) = importer.current_finding {
-                        finding.recommendation.push_str(format!("\n\n```\n{}```", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str());
-                    }
-                    
-                    MarkdownHeader::Alleviation => if let Some(ref mut finding) = importer.current_finding {
-                        finding.alleviation.push_str(format!("\n\n```\n{}```", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str());
-                    }
-                }
-            }
-        }
-
-        &mut comrak::nodes::NodeValue::Text(ref mut text) => {
-            assert!(importer.current_finding.is_some());
-            if let Some(level) = importer.current_header_level {
-                match level {
-                    3 => if let Some(ref mut finding) = importer.current_finding {
-                        finding.title.push_str(std::str::from_utf8(text).unwrap());
-                        importer.current_header_level = None;
-                    }
-
-                    4 => match std::str::from_utf8(text).unwrap() {
-                        "Description:" => {
-                            importer.current_header = Some(MarkdownHeader::Description);
-                            importer.current_header_level = None;
-                        }
-
-                        "Recommendation:" => {
-                            importer.current_header = Some(MarkdownHeader::Recommendation);
-                            importer.current_header_level = None;
-                        }
-
-                        "Alleviation:" => {
-                            importer.current_header = Some(MarkdownHeader::Alleviation);
-                            importer.current_header_level = None;
-                        }
-
-                        _ => ()
-                    }
-
-                    _ => ()
-                }
-            } else {
-                if let Some(header) = importer.current_header {
-                    match header {
-                        MarkdownHeader::Description => if let Some(ref mut finding) = importer.current_finding {
-                            finding.description.push_str(std::str::from_utf8(text).unwrap());
-                        }
-                        
-                        MarkdownHeader::Recommendation => if let Some(ref mut finding) = importer.current_finding {
-                            finding.recommendation.push_str(std::str::from_utf8(text).unwrap());
-                        }
-                        
-                        MarkdownHeader::Alleviation => if let Some(ref mut finding) = importer.current_finding {
-                            finding.alleviation.push_str(std::str::from_utf8(text).unwrap());
-                        }
-                    }
-                } else {
-                    println!("Unused text: {}", std::str::from_utf8(text).unwrap());
-                }
-            }
-        }
-        _ => (),
-    }
-
-    for c in node.children() {
-        parse_markdown_ast_node(state, importer, c);
-    }
 }
 
 fn export_markdown<'a>(_: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
@@ -387,100 +290,22 @@ fn export_pdf<'a>(view: &mut web_view::WebView<'a, ()>, _: &mut StateData) -> we
     view.eval("alert('PDF exporting is not currently supported')")
 }
 
-fn load_active_workbook<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
-    let mut findings = vec![];
-    
-    for finding in state.findings.values() {
-        findings.push(finding.clone());
-    }
+fn create_finding<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
+    state.current_finding_id += 1;
 
-    findings.sort_by(|a, b| a.id.cmp(&b.id));
+    let finding = Finding {
+        id: state.current_finding_id,
+        title: format!("Finding{}", state.current_finding_id),
+        class: String::new(),
+        severity: None,
+        location: String::new(),
+        description: String::new(),
+        recommendation: String::new(),
+        alleviation: String::new()
+    };
 
-    for ref finding in findings {
-        add_finding(view, state, finding)?;
-    }
-
-    Ok(())
-}
-
-fn load_workbook<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
-    if let Some(path) = tinyfiledialogs::open_file_dialog("Select a JSON workbook", "workbook.json", None) {
-        use std::fs;
-
-        match fs::read_to_string(path) {
-            Err(error) => {
-                return Err(web_view::Error::Custom(Box::new(error)))
-            }
-
-            Ok(json) => {
-                match serde_json::from_str(json.as_str()) {
-                    Err(error) => {
-                        return Err(web_view::Error::Custom(Box::new(error)))
-                    }
-
-                    Ok(report::Report { mut findings, .. }) => {
-                        clear_findings(view, state)?;
-                        
-                        findings.sort_by(|lhs, rhs| lhs.id.cmp(&rhs.id));
-
-                        state.current_finding_id = findings.len();
-                        
-                        for (_, finding) in findings.iter().enumerate() {
-                            assert!(state.findings.insert(finding.id, finding.clone()).is_none());                        
-                            add_finding(view, state, &finding)?;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn save_workbook<'a>(_: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
-    if let Some(path) = tinyfiledialogs::save_file_dialog("Select a JSON workbook", "workbook.json") {
-        use std::{fs::File, io::Write};
-
-        let mut file = match File::create(path) {
-            Err(error) => return Err(web_view::Error::Custom(Box::new(error))),
-            Ok(file) => file
-        };
-
-        let mut report = report::Report {
-            title: "Report Title".to_string(),
-            auditors: vec![
-                report::Auditor {
-                    name: "Camden Smallwood".to_string(),
-                    email: "camden.smallwood@certik.org".to_string()
-                }
-            ],
-            start_time: "Oct. 12, 2020".to_string(),
-            delivery_time: "Oct. 19, 2020".to_string(),
-            repository: "Repository URL".to_string(),
-            commit_hashes: vec!["Commit Hash 1".to_string(), "Commit Hash 2".to_string()],
-            overview: "Executive Overview".to_string(),
-            findings: vec![]
-        };
-
-        for (_, finding) in &state.findings {
-            report.findings.push(finding.clone());
-        }
-
-        match serde_json::to_string(&report) {
-            Err(error) => {
-                return Err(web_view::Error::Custom(Box::new(error)))
-            }
-
-            Ok(json) => {
-                if let Err(error) = file.write_all(json.as_bytes()) {
-                    return Err(web_view::Error::Custom(Box::new(error)))
-                }
-            }
-        }
-    }
-
-    Ok(())
+    assert!(state.findings.insert(finding.id, finding.clone()).is_none());
+    add_finding_to_web_view(view, state, &finding)
 }
 
 fn copy_finding<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize) -> web_view::WVResult {
@@ -498,12 +323,158 @@ fn paste_finding<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData
     let mut finding = state.copied_finding.clone().unwrap();
     state.current_finding_id += 1;
     finding.id = state.current_finding_id;
-    add_finding(view, state, &finding)?;
+    add_finding_to_web_view(view, state, &finding)?;
     assert!(state.findings.insert(finding.id, finding).is_none());
     Ok(())
 }
 
-fn add_finding<'a>(view: &mut web_view::WebView<'a, ()>, _: &mut StateData, finding: &Finding) -> web_view::WVResult {
+fn remove_finding<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize) -> web_view::WVResult {
+    if state.findings.remove(&id).is_some() {
+        let _ = state.findings.remove(&id);
+
+        let mut finding = HtmlElement::get(format!("finding{}", id).as_str());
+        finding.remove();
+        finding.build(view)?;
+
+        let mut link = HtmlElement::get(format!("finding{}_link_p", id).as_str());
+        link.remove();
+        link.build(view)
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
+    }
+}
+
+fn clear_findings<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
+    let mut ids = vec![];
+
+    for id in state.findings.keys() {
+        ids.push(*id);
+    }
+
+    for id in ids {
+        remove_finding(view, state, id)?;
+    }
+
+    state.current_finding_id = 0;
+
+    Ok(())
+}
+
+fn set_finding_title<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, title: &str) -> web_view::WVResult {
+    if let Some(entry) = state.findings.get_mut(&id) {
+        entry.title = title.to_string();
+
+        let mut finding_link = HtmlElement::get(format!("finding{}_link", id).as_str());
+        finding_link.set_inner_html(title);
+        finding_link.build(view)?;
+
+        let mut finding_title = HtmlElement::get(format!("finding{}_title", id).as_str());
+        finding_title.set_inner_html(title);
+        finding_title.build(view)
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
+    }
+}
+
+fn set_finding_type<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, class: &str) -> web_view::WVResult {
+    if let Some(entry) = state.findings.get_mut(&id) {
+        entry.class = class.to_string();
+
+        let mut finding_type = HtmlElement::get(format!("finding{}_type", id).as_str());
+        finding_type.set_inner_html(class);
+        finding_type.build(view)
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
+    }
+}
+
+fn set_finding_severity<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, severity: &str) -> web_view::WVResult {
+    if let Some(entry) = state.findings.get_mut(&id) {
+        entry.severity = match severity {
+            "critical" => Some(report::Severity::Critical),
+            "major" => Some(report::Severity::Major),
+            "minor" => Some(report::Severity::Minor),
+            "informational" => Some(report::Severity::Informational),
+            _ => None
+        };
+
+        let style = match entry.severity {
+            Some(report::Severity::Critical) => "color: rgb(230, 68, 60)",
+            Some(report::Severity::Major) => "color: rgb(249, 159, 28)",
+            Some(report::Severity::Minor) => "color: rgb(65, 91, 169)",
+            Some(report::Severity::Informational) => "color: rgb(85, 155, 74)",
+            None => "color: rgb(85, 84, 85)",
+        };
+
+        let mut description_header = HtmlElement::get(format!("finding{}_description_header", id).as_str());
+        description_header.set_attribute("style", style);
+        description_header.build(view)?;
+
+        let mut recommendation_header = HtmlElement::get(format!("finding{}_recommendation_header", id).as_str());
+        recommendation_header.set_attribute("style", style);
+        recommendation_header.build(view)?;
+
+        let mut alleviation_header = HtmlElement::get(format!("finding{}_alleviation_header", id).as_str());
+        alleviation_header.set_attribute("style", style);
+        alleviation_header.build(view)?;
+
+        let mut option = HtmlElement::get(format!("finding{}_severity_{}_option", id, severity).as_str());
+        option.set_selected(true);
+        option.build(view)
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
+    }
+}
+
+fn set_finding_location<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, location: &str) -> web_view::WVResult {
+    if let Some(entry) = state.findings.get_mut(&id) {
+        entry.location = location.to_string();
+
+        let mut finding_location = HtmlElement::get(format!("finding{}_location", id).as_str());
+        finding_location.set_inner_html(location);
+        finding_location.build(view)
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
+    }
+}
+
+fn set_finding_description<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, description: &str) -> web_view::WVResult {
+    if let Some(entry) = state.findings.get_mut(&id) {
+        entry.description = description.to_string();
+
+        let mut finding_description = HtmlElement::get(format!("finding{}_description", id).as_str());
+        finding_description.set_inner_html(description);
+        finding_description.build(view)
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
+    }
+}
+
+fn set_finding_recommendation<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, recommendation: &str) -> web_view::WVResult {
+    if let Some(entry) = state.findings.get_mut(&id) {
+        entry.recommendation = recommendation.to_string();
+
+        let mut finding_recommendation = HtmlElement::get(format!("finding{}_recommendation", id).as_str());
+        finding_recommendation.set_inner_html(recommendation);
+        finding_recommendation.build(view)
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
+    }
+}
+
+fn set_finding_alleviation<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, alleviation: &str) -> web_view::WVResult {
+    if let Some(entry) = state.findings.get_mut(&id) {
+        entry.alleviation = alleviation.to_string();
+
+        let mut finding_alleviation = HtmlElement::get(format!("finding{}_alleviation", id).as_str());
+        finding_alleviation.set_inner_html(alleviation);
+        finding_alleviation.build(view)
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
+    }
+}
+
+fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, _: &mut StateData, finding: &Finding) -> web_view::WVResult {
     //
     // Create a new finding table
     //
@@ -738,134 +709,4 @@ fn add_finding<'a>(view: &mut web_view::WebView<'a, ()>, _: &mut StateData, find
 
     toc_findings.append_child(p);
     toc_findings.build(view)
-}
-
-fn remove_finding<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize) -> web_view::WVResult {
-    if state.findings.remove(&id).is_some() {
-        let _ = state.findings.remove(&id);
-
-        let mut finding = HtmlElement::get(format!("finding{}", id).as_str());
-        finding.remove();
-        finding.build(view)?;
-
-        let mut link = HtmlElement::get(format!("finding{}_link_p", id).as_str());
-        link.remove();
-        link.build(view)
-    } else {
-        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
-    }
-}
-
-fn set_finding_title<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, title: &str) -> web_view::WVResult {
-    if let Some(entry) = state.findings.get_mut(&id) {
-        entry.title = title.to_string();
-
-        let mut finding_link = HtmlElement::get(format!("finding{}_link", id).as_str());
-        finding_link.set_inner_html(title);
-        finding_link.build(view)?;
-
-        let mut finding_title = HtmlElement::get(format!("finding{}_title", id).as_str());
-        finding_title.set_inner_html(title);
-        finding_title.build(view)
-    } else {
-        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
-    }
-}
-
-fn set_finding_type<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, class: &str) -> web_view::WVResult {
-    if let Some(entry) = state.findings.get_mut(&id) {
-        entry.class = class.to_string();
-
-        let mut finding_type = HtmlElement::get(format!("finding{}_type", id).as_str());
-        finding_type.set_inner_html(class);
-        finding_type.build(view)
-    } else {
-        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
-    }
-}
-
-fn set_finding_severity<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, severity: &str) -> web_view::WVResult {
-    if let Some(entry) = state.findings.get_mut(&id) {
-        entry.severity = match severity {
-            "critical" => Some(report::Severity::Critical),
-            "major" => Some(report::Severity::Major),
-            "minor" => Some(report::Severity::Minor),
-            "informational" => Some(report::Severity::Informational),
-            _ => None
-        };
-
-        let style = match entry.severity {
-            Some(report::Severity::Critical) => "color: rgb(230, 68, 60)",
-            Some(report::Severity::Major) => "color: rgb(249, 159, 28)",
-            Some(report::Severity::Minor) => "color: rgb(65, 91, 169)",
-            Some(report::Severity::Informational) => "color: rgb(85, 155, 74)",
-            None => "color: rgb(85, 84, 85)",
-        };
-
-        let mut description_header = HtmlElement::get(format!("finding{}_description_header", id).as_str());
-        description_header.set_attribute("style", style);
-        description_header.build(view)?;
-
-        let mut recommendation_header = HtmlElement::get(format!("finding{}_recommendation_header", id).as_str());
-        recommendation_header.set_attribute("style", style);
-        recommendation_header.build(view)?;
-
-        let mut alleviation_header = HtmlElement::get(format!("finding{}_alleviation_header", id).as_str());
-        alleviation_header.set_attribute("style", style);
-        alleviation_header.build(view)?;
-
-        let mut option = HtmlElement::get(format!("finding{}_severity_{}_option", id, severity).as_str());
-        option.set_selected(true);
-        option.build(view)
-    } else {
-        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
-    }
-}
-
-fn set_finding_location<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, location: &str) -> web_view::WVResult {
-    if let Some(entry) = state.findings.get_mut(&id) {
-        entry.location = location.to_string();
-
-        let mut finding_location = HtmlElement::get(format!("finding{}_location", id).as_str());
-        finding_location.set_inner_html(location);
-        finding_location.build(view)
-    } else {
-        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
-    }
-}
-
-fn set_finding_description<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, description: &str) -> web_view::WVResult {
-    if let Some(entry) = state.findings.get_mut(&id) {
-        entry.description = description.to_string();
-
-        let mut finding_description = HtmlElement::get(format!("finding{}_description", id).as_str());
-        finding_description.set_inner_html(description);
-        finding_description.build(view)
-    } else {
-        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
-    }
-}
-
-fn set_finding_recommendation<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, recommendation: &str) -> web_view::WVResult {
-    if let Some(entry) = state.findings.get_mut(&id) {
-        entry.recommendation = recommendation.to_string();
-
-        let mut finding_recommendation = HtmlElement::get(format!("finding{}_recommendation", id).as_str());
-        finding_recommendation.set_inner_html(recommendation);
-        finding_recommendation.build(view)
-    } else {
-        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
-    }
-}
-
-fn set_finding_alleviation<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, alleviation: &str) -> web_view::WVResult {
-    if let Some(entry) = state.findings.get_mut(&id) {
-        entry.alleviation = alleviation.to_string();
-
-        let mut finding_alleviation = HtmlElement::get(format!("finding{}_alleviation", id).as_str());
-        finding_alleviation.set_inner_html(alleviation);
-        finding_alleviation.build(view)
-    } else {
-        Err(web_view::Error::Custom(Box::new(format!("No finding for id {} was found!", id))))
-    }
 }
