@@ -374,6 +374,10 @@ fn set_finding_title<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut State
         finding_link.set_inner_html(title);
         finding_link.build(view)?;
 
+        let mut finding_title_id = HtmlElement::get(format!("finding{}_title_id", id).as_str());
+        finding_title_id.set_inner_html(format!("{}: ", id).as_str());
+        finding_title_id.build(view)?;
+
         let mut finding_title = HtmlElement::get(format!("finding{}_title", id).as_str());
         finding_title.set_inner_html(title);
         finding_title.build(view)
@@ -544,7 +548,14 @@ fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, finding: &F
 
     // ---------------------------------------------------
 
-    let title_text_cell = title_row.insert_cell(1, "title_text_cell");
+    let title_id_cell = title_row.insert_cell(1, "title_id_cell");
+    title_id_cell.set_inner_html(format!("{}: ", finding.id).as_str());
+    title_id_cell.set_attribute("id", format!("finding{}_title_id", finding.id).as_str());
+    title_id_cell.set_attribute("style", "font-size: 1.5rem; padding-left: 0.25rem; padding-right: 0.25rem; text-align: center; vertical-align: middle");
+    
+    // ---------------------------------------------------
+
+    let title_text_cell = title_row.insert_cell(2, "title_text_cell");
     title_text_cell.set_attribute("style", "width: 100%; vertical-align: middle");
     
     let mut title_text_input = HtmlElement::new("input", "title_text_input");
