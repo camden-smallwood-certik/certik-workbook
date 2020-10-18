@@ -47,10 +47,10 @@ fn main() {
             match iter.next().unwrap().as_str() {
                 "load_active_workbook" => load_active_workbook(view, &mut state)?,
                 "load_workbook" => load_workbook(view, &mut state)?,
-                "save_workbook" => save_workbook(view, &mut state)?,
+                "save_workbook" => save_workbook(&mut state)?,
                 "import_markdown" => import_markdown(view, &mut state)?,
-                "export_markdown" => export_markdown(view, &mut state)?,
-                "export_pdf" => export_pdf(view, &mut state)?,
+                "export_markdown" => export_markdown(&mut state)?,
+                "export_pdf" => export_pdf(view)?,
                 "create_finding" => create_finding(view, &mut state)?,
                 "copy_finding" => copy_finding(view, &mut state, iter.next().unwrap().parse().unwrap())?,
                 "paste_finding" => paste_finding(view, &mut state)?,
@@ -121,7 +121,7 @@ fn load_active_workbook<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut St
     findings.sort_by(|a, b| a.id.cmp(&b.id));
 
     for ref finding in findings {
-        add_finding_to_web_view(view, state, finding)?;
+        add_finding_to_web_view(view, finding)?;
     }
 
     Ok(())
@@ -151,7 +151,7 @@ fn load_workbook<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData
                         
                         for (_, finding) in findings.iter().enumerate() {
                             assert!(state.findings.insert(finding.id, finding.clone()).is_none());                        
-                            add_finding_to_web_view(view, state, &finding)?;
+                            add_finding_to_web_view(view, &finding)?;
                         }
                     }
                 }
@@ -162,7 +162,7 @@ fn load_workbook<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData
     Ok(())
 }
 
-fn save_workbook<'a>(_: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
+fn save_workbook<'a>(state: &mut StateData) -> web_view::WVResult {
     if let Some(path) = tinyfiledialogs::save_file_dialog("Select a JSON workbook", "workbook.json") {
         use std::{fs::File, io::Write};
 
@@ -224,7 +224,7 @@ fn import_markdown<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateDa
 
                 for ref finding in parser.findings {
                     assert!(state.findings.insert(finding.id, finding.clone()).is_none());
-                    add_finding_to_web_view(view, state, finding)?;
+                    add_finding_to_web_view(view, finding)?;
                 }
             }
         }
@@ -233,7 +233,7 @@ fn import_markdown<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateDa
     Ok(())
 }
 
-fn export_markdown<'a>(_: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
+fn export_markdown<'a>(state: &mut StateData) -> web_view::WVResult {
     if let Some(path) = tinyfiledialogs::save_file_dialog("Select a Markdown file", "workbook.md") {
         use std::{fs::File, io::Write};
 
@@ -286,7 +286,7 @@ fn export_markdown<'a>(_: &mut web_view::WebView<'a, ()>, state: &mut StateData)
     Ok(())
 }
 
-fn export_pdf<'a>(view: &mut web_view::WebView<'a, ()>, _: &mut StateData) -> web_view::WVResult {
+fn export_pdf<'a>(view: &mut web_view::WebView<'a, ()>) -> web_view::WVResult {
     view.eval("alert('PDF exporting is not currently supported')")
 }
 
@@ -304,13 +304,19 @@ fn create_finding<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateDat
         alleviation: String::new()
     };
 
+    // Attempt to add the new finding to the state data findings map
     assert!(state.findings.insert(finding.id, finding.clone()).is_none());
-    add_finding_to_web_view(view, state, &finding)
+
+    // Attempt to add the new finding to the web view
+    add_finding_to_web_view(view, &finding)
 }
 
 fn copy_finding<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize) -> web_view::WVResult {
     if let Some(finding) = state.findings.get(&id) {
+        // Set the copied finding in the state data
         state.copied_finding = Some(finding.clone());
+
+        // Attempt to enable the paste button in the web view
         let mut paste_button = html::HtmlElement::get("paste_button");
         paste_button.set_disabled(false);
         paste_button.build(view)
@@ -323,7 +329,7 @@ fn paste_finding<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData
     let mut finding = state.copied_finding.clone().unwrap();
     state.current_finding_id += 1;
     finding.id = state.current_finding_id;
-    add_finding_to_web_view(view, state, &finding)?;
+    add_finding_to_web_view(view, &finding)?;
     assert!(state.findings.insert(finding.id, finding).is_none());
     Ok(())
 }
@@ -474,7 +480,7 @@ fn set_finding_alleviation<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut
     }
 }
 
-fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, _: &mut StateData, finding: &Finding) -> web_view::WVResult {
+fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, finding: &Finding) -> web_view::WVResult {
     //
     // Create a new finding table
     //
