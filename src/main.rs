@@ -15,23 +15,31 @@ use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct StateData {
+    pub initialized: bool,
     pub current_finding_id: usize,
     pub findings: HashMap<usize, Finding>,
     pub copied_finding: Option<Finding>
 }
 
+impl StateData {
+    pub fn new() -> Self {
+        Self {
+            initialized: false,
+            current_finding_id: 0,
+            findings: HashMap::new(),
+            copied_finding: None
+        }
+    }
+}
+
 fn main() {
-    let html = include_str!("../html/index.html");
+    // Initialize the local state data
+    let mut state = StateData::new();
 
-    let mut state = StateData {
-        current_finding_id: 0,
-        findings: HashMap::new(),
-        copied_finding: None
-    };
-
-    web_view::builder()
+    // Build the web view
+    let view = web_view::builder()
         .title("CertiK Workbook")
-        .content(web_view::Content::Html(html))
+        .content(web_view::Content::Html(include_str!("../html/index.html")))
         .size(1024, 640)
         .resizable(true)
         .debug(true)
@@ -71,8 +79,112 @@ fn main() {
 
             Ok(())
         })
-        .run()
+        .build()
         .unwrap();
+
+    // Set up the main menu for macOS
+    #[cfg(target_os = "macos")] unsafe {
+        use cocoa::base::{selector, nil};
+        use cocoa::foundation::{NSAutoreleasePool, NSString};
+        use cocoa::appkit::{
+            NSApp, NSApplication, NSMenu, NSMenuItem, NSRunningApplication, NSEventModifierFlags,
+            NSApplicationActivateIgnoringOtherApps, NSApplicationActivationPolicyRegular
+        };
+        
+        let _ = NSAutoreleasePool::new(nil);
+ 
+        //----------------------------------
+ 
+        let app = NSApp();
+        app.setActivationPolicy_(NSApplicationActivationPolicyRegular);
+ 
+        //----------------------------------
+ 
+        let menu_bar = NSMenu::new(nil).autorelease();
+
+        //----------------------------------
+ 
+        let app_menu_item = NSMenuItem::new(nil).autorelease();
+        menu_bar.addItem_(app_menu_item);
+
+        //----------------------------------
+ 
+        app.setMainMenu_(menu_bar);
+ 
+        //----------------------------------
+ 
+        let app_menu = NSMenu::new(nil).autorelease();
+        
+        let undo_title = NSString::alloc(nil).init_str("Undo");
+        let undo_action = selector("undo:");
+        let undo_key = NSString::alloc(nil).init_str("z");
+        let undo_item = NSMenuItem::alloc(nil)
+            .initWithTitle_action_keyEquivalent_(undo_title, undo_action, undo_key)
+            .autorelease();
+        app_menu.addItem_(undo_item);
+
+        let redo_title = NSString::alloc(nil).init_str("Redo");
+        let redo_action = selector("redo:");
+        let redo_key = NSString::alloc(nil).init_str("z");
+        let redo_item = NSMenuItem::alloc(nil)
+            .initWithTitle_action_keyEquivalent_(redo_title, redo_action, redo_key)
+            .autorelease();
+        redo_item.setKeyEquivalentModifierMask_(NSEventModifierFlags::NSCommandKeyMask | NSEventModifierFlags::NSShiftKeyMask);
+        app_menu.addItem_(redo_item);
+
+        let select_all_title = NSString::alloc(nil).init_str("Select All");
+        let select_all_action = selector("selectAll:");
+        let select_all_key = NSString::alloc(nil).init_str("a");
+        let select_all_item = NSMenuItem::alloc(nil)
+            .initWithTitle_action_keyEquivalent_(select_all_title, select_all_action, select_all_key)
+            .autorelease();
+        app_menu.addItem_(select_all_item);
+
+        let cut_title = NSString::alloc(nil).init_str("Cut");
+        let cut_action = selector("cut:");
+        let cut_key = NSString::alloc(nil).init_str("x");
+        let cut_item = NSMenuItem::alloc(nil)
+            .initWithTitle_action_keyEquivalent_(cut_title, cut_action, cut_key)
+            .autorelease();
+        app_menu.addItem_(cut_item);
+
+        let copy_title = NSString::alloc(nil).init_str("Copy");
+        let copy_action = selector("copy:");
+        let copy_key = NSString::alloc(nil).init_str("c");
+        let copy_item = NSMenuItem::alloc(nil)
+            .initWithTitle_action_keyEquivalent_(copy_title, copy_action, copy_key)
+            .autorelease();
+        app_menu.addItem_(copy_item);
+
+        let paste_title = NSString::alloc(nil).init_str("Paste");
+        let paste_action = selector("paste:");
+        let paste_key = NSString::alloc(nil).init_str("v");
+        let paste_item = NSMenuItem::alloc(nil)
+            .initWithTitle_action_keyEquivalent_(paste_title, paste_action, paste_key)
+            .autorelease();
+        app_menu.addItem_(paste_item);
+
+        let quit_title = NSString::alloc(nil).init_str("Quit");
+        let quit_action = selector("terminate:");
+        let quit_key = NSString::alloc(nil).init_str("q");
+        let quit_item = NSMenuItem::alloc(nil)
+            .initWithTitle_action_keyEquivalent_(quit_title, quit_action, quit_key)
+            .autorelease();
+        app_menu.addItem_(quit_item);
+
+        app_menu_item.setSubmenu_(app_menu);
+
+        //----------------------------------
+ 
+        let current_app = NSRunningApplication::currentApplication(nil);
+        current_app.activateWithOptions_(NSApplicationActivateIgnoringOtherApps);
+
+        //----------------------------------
+ 
+        app.run();
+    }
+
+    view.run().unwrap()
 }
 
 fn tokenize_command_string(string: &str) -> Vec<String> {
