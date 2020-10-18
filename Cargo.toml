@@ -8,7 +8,7 @@ edition = "2018"
 [package.metadata.bundle]
 name = "CertiK Workbook"
 identifier = "org.certik.workbook"
-icon = ["osx/32x32.png", "osx/64x64.png", "osx/128x128.png", "osx/256x256.png"]
+icon = ["osx/32x32.png", "osx/64x64.png", "osx/128x128.png", "osx/256x256.png, osx/512x512.png"]
 version = "1.0.0"
 copyright = "Copyright (c) CertiK 2020. All rights reserved."
 category = "Developer Tool"
