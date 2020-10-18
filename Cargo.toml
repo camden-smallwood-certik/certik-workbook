@@ -1,8 +1,26 @@
 [package]
 name = "certik-workbook"
+description = "CertiK Workbook"
 version = "0.1.0"
 authors = ["Camden Smallwood <camden.smallwood@certik.org>"]
 edition = "2018"
+
+[profile.release]
+lto = true
+opt-level = "s"
+
+[package.metadata.bundle]
+name = "CertiK Workbook"
+identifier = "org.certik.workbook"
+icon = ["osx/32x32.png", "osx/128x128.png", "osx/256x256.png"]
+version = "1.0.0"
+resources = ["assets", "images/**/*.png", "secrets/public_key.txt"]
+copyright = "Copyright (c) Jane Doe 2016. All rights reserved."
+category = "Developer Tool"
+short_description = "CertiK Workbook"
+long_description = """
+CertiK Workbook
+"""
 
 [dependencies]
 serde = "1.0"
