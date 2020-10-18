@@ -521,12 +521,16 @@ fn set_finding_severity<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut St
         };
 
         let style = match entry.severity {
-            Some(report::Severity::Critical) => "color: rgb(230, 68, 60)",
-            Some(report::Severity::Major) => "color: rgb(249, 159, 28)",
-            Some(report::Severity::Minor) => "color: rgb(65, 91, 169)",
-            Some(report::Severity::Informational) => "color: rgb(85, 155, 74)",
-            None => "color: rgb(85, 84, 85)",
+            Some(report::Severity::Critical) => "color: red",
+            Some(report::Severity::Major) => "color: orange",
+            Some(report::Severity::Minor) => "color: yellow",
+            Some(report::Severity::Informational) => "color: green",
+            None => "color: inherit",
         };
+
+        let mut finding_link = HtmlElement::get(format!("finding{}_link", id).as_str());
+        finding_link.set_attribute("style", style);
+        finding_link.build(view)?;
 
         let mut description_header = HtmlElement::get(format!("finding{}_description_header", id).as_str());
         description_header.set_attribute("style", style);
@@ -621,8 +625,9 @@ fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, finding: &F
     // ---------------------------------------------------
 
     let mut toolbar_close_button = HtmlElement::new("button", "toolbar_close_button");
-    toolbar_close_button.set_attribute("onclick", format!("external.invoke(\"remove_finding {}\")", finding.id).as_str());
     toolbar_close_button.set_inner_html("X");
+    toolbar_close_button.set_field("style.backgroundColor", "tomato");
+    toolbar_close_button.set_attribute("onclick", format!("external.invoke(\"remove_finding {}\")", finding.id).as_str());
     
     toolbar_cell.append_child(toolbar_close_button);
 
@@ -653,7 +658,7 @@ fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, finding: &F
     title_image_cell.set_attribute("style", "vertical-align: middle");
     
     let mut title_image = HtmlElement::new("img", "title_image");
-    title_image.set_attribute("src", "https://svgshare.com/i/QKR.svg");
+    title_image.set_attribute("src", "https://i.imgur.com/QwKomxS.png");
     title_image.set_attribute("style", "width: 40px; height: auto");
     
     title_image_cell.append_child(title_image);
@@ -773,18 +778,18 @@ fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, finding: &F
     // Create the text areas for the new finding
     //
 
-    let header_style = match finding.severity {
-        Some(report::Severity::Critical) => "color: rgb(230, 68, 60)",
-        Some(report::Severity::Major) => "color: rgb(249, 159, 28)",
-        Some(report::Severity::Minor) => "color: rgb(65, 91, 169)",
-        Some(report::Severity::Informational) => "color: rgb(85, 155, 74)",
-        None => "color: rgb(85, 84, 85)",
+    let severity_style = match finding.severity {
+        Some(report::Severity::Critical) => "color: red",
+        Some(report::Severity::Major) => "color: orange",
+        Some(report::Severity::Minor) => "color: yellow",
+        Some(report::Severity::Informational) => "color: green",
+        None => "color: inherit",
     };
 
     let mut create_text_area = |name, text, string| {
         let mut header = HtmlElement::new("h4", format!("finding{}_{}_header", finding.id, name).as_str());
         header.set_inner_html(text);
-        header.set_attribute("style", header_style);
+        header.set_attribute("style", severity_style);
         header.set_attribute("id", format!("finding{}_{}_header", finding.id, name).as_str());
         new_cell.append_child(header);
     
@@ -831,6 +836,7 @@ fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, finding: &F
     p.append_child(link_id);
 
     let mut link = HtmlElement::new("a", "link");
+    link.set_attribute("style", severity_style);
     link.set_attribute("id", format!("finding{}_link", finding.id).as_str());
     link.set_attribute("href", format!("#finding{}", finding.id).as_str());
     link.set_inner_html(finding.title.as_str());

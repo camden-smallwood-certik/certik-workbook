@@ -1,8 +1,11 @@
 <html>
     <head>
         <style>
+            * {
+                background-color: rgb(51, 51, 51);
+                color: #ddd;
+            }
             html {
-                color: rgb(85, 84, 85);
                 font-family: poppins, sans-serif;
                 scroll-behavior: smooth;
             }
@@ -36,19 +39,24 @@
             table tr th, table tr td {
                 vertical-align: top;
                 background-color: transparent;
-                border-bottom: 1px solid #ddd;
+                border-bottom: 1px solid #555;
                 border-collapse: collapse;
                 font-weight: normal;
             }
             code, pre {
                 outline-style: none;
                 background-color: transparent;
-                border: 1px dashed rgb(85, 84, 85);
+                border: 1px dashed #555;
             }
             select, textarea, input[type="text"] {
+                border: 1px solid #555;
                 box-sizing: border-box;
                 width: 100%;
                 max-width: 100%;
+            }
+            button {
+                background-color: #555;
+                border-style: none;
             }
         </style>
     </head>
@@ -57,11 +65,11 @@
             <tr>
                 <!-- Checklist and Table of Contents Area -->
                 <td style="border-color: transparent; width: 0">
-                    <div class="ui" style="border-right: 1px solid #ddd; resize: horizontal; width: 10rem; height: 100%">
+                    <div class="ui" style="border-right: 1px solid #555; resize: horizontal; width: 10rem; height: 100%">
                         <table style="width: 100%; height: 100%">
                             <tr>
                                 <td style="border-color: transparent; width: 100%">
-                                    <div class="ui" id="toc_contracts" style="border-bottom: 1px solid #ddd; resize: vertical; height: 3rem; width: 100%">
+                                    <div class="ui" id="toc_contracts" style="border-bottom: 1px solid #555; resize: vertical; height: 3rem; width: 100%">
                                         <h4 style="text-align: center; width: 100%">Contracts</h4>
                                     </div>
                                 </td>
