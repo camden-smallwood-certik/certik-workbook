@@ -10,6 +10,7 @@ pub struct HtmlElement {
     pub inner: Option<String>,
     pub text: Option<String>,
     pub value: Option<String>,
+    pub checked: Option<bool>,
     pub selected: Option<bool>,
     pub selected_index: Option<usize>,
     pub attrs: HashMap<String, String>,
@@ -30,6 +31,7 @@ impl HtmlElement {
             inner: None,
             text: None,
             value: None,
+            checked: None,
             selected: None,
             selected_index: None,
             attrs: HashMap::new(),
@@ -50,6 +52,7 @@ impl HtmlElement {
             inner: None,
             text: None,
             value: None,
+            checked: None,
             selected: None,
             selected_index: None,
             attrs: HashMap::new(),
@@ -96,6 +99,10 @@ impl HtmlElement {
 
     pub fn set_disabled(&mut self, disabled: bool) {
         self.disabled = Some(disabled);
+    }
+
+    pub fn set_checked(&mut self, checked: bool) {
+        self.checked = Some(checked);
     }
 
     pub fn set_selected(&mut self, selected: bool) {
@@ -146,16 +153,18 @@ impl HtmlElement {
             js.push_str(format!("{}.value = '{}';", self.name, value.replace("'", "\\'").replace("\r\n", "\n").replace("\n", "\\n")).as_str());
         }
 
-        if let Some(true) = self.selected {
-            js.push_str(format!("{}.selected = true;", self.name).as_str());
+        if let Some(checked) = self.checked {
+            js.push_str(format!("{}.checked = {};", self.name, checked).as_str());
         }
 
-        match self.disabled {
-            Some(true) => js.push_str(format!("{}.disabled = true;", self.name).as_str()),
-            Some(false) => js.push_str(format!("{}.disabled = false;", self.name).as_str()),
-            None => ()
+        if let Some(selected) = self.selected {
+            js.push_str(format!("{}.selected = {};", self.name, selected).as_str());
         }
 
+        if let Some(disabled) = self.disabled {
+            js.push_str(format!("{}.disabled = {};", self.name, disabled).as_str());
+        }
+        
         for attr in &self.attrs {
             js.push_str(format!("{}.setAttribute('{}', '{}');", self.name, attr.0.replace("'", "\\'").replace("\r\n", "\n").replace("\n", "\\n"), attr.1.replace("'", "\\'").replace("\r\n", "\n").replace("\n", "\\n")).as_str());
         }

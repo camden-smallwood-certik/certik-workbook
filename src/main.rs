@@ -17,6 +17,7 @@ use std::collections::HashMap;
 pub struct StateData {
     pub initialized: bool,
     pub current_finding_id: usize,
+    pub checklist: Vec<(bool, String)>,
     pub findings: HashMap<usize, Finding>,
     pub copied_finding: Option<Finding>
 }
@@ -26,6 +27,7 @@ impl StateData {
         Self {
             initialized: false,
             current_finding_id: 0,
+            checklist: vec![],
             findings: HashMap::new(),
             copied_finding: None
         }
@@ -59,6 +61,7 @@ fn main() {
                 "import_markdown" => import_markdown(view, &mut state)?,
                 "export_markdown" => export_markdown(&mut state)?,
                 "export_pdf" => export_pdf(view)?,
+                "create_checklist_entry" => create_checklist_entry(view, &mut state)?,
                 "create_finding" => create_finding(view, &mut state)?,
                 "copy_finding" => copy_finding(view, &mut state, iter.next().unwrap().parse().unwrap())?,
                 "paste_finding" => paste_finding(view, &mut state)?,
@@ -402,6 +405,12 @@ fn export_pdf<'a>(view: &mut web_view::WebView<'a, ()>) -> web_view::WVResult {
     view.eval("alert('PDF exporting is not currently supported')")
 }
 
+fn create_checklist_entry<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
+    let index = state.checklist.len();
+    state.checklist.push((false, String::new()));
+    add_checklist_entry_to_web_view(view, (index, false, ""))
+}
+
 fn create_finding<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
     state.current_finding_id += 1;
 
@@ -607,6 +616,7 @@ fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, finding: &F
 
     let mut new_table = HtmlElement::new("table", "new_table");
     new_table.set_attribute("id", format!("finding{}", finding.id).as_str());
+    new_table.set_attribute("style", "margin: 1rem");
 
     let new_row = new_table.insert_row(0, "new_row");
     let new_cell = new_row.insert_cell(0, "new_cell");
@@ -844,4 +854,31 @@ fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, finding: &F
 
     toc_findings.append_child(p);
     toc_findings.build(view)
+}
+
+fn add_checklist_entry_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, entry: (usize, bool, &str)) -> web_view::WVResult {
+    let mut entry_check_input = HtmlElement::new("input", "entry_check_input");
+    entry_check_input.set_attribute("id", format!("checklist{}_check_input", entry.0).as_str());
+    entry_check_input.set_attribute("type", "checkbox");
+    entry_check_input.set_checked(entry.1);
+    
+    let mut entry_title_input = HtmlElement::new("input", "entry_title_input");
+    entry_title_input.set_attribute("id", format!("checklist{}_title_input", entry.0).as_str());
+    entry_title_input.set_attribute("type", "text");
+
+    let mut entry_table = HtmlElement::new("table", "entry_table");
+    entry_table.set_attribute("style", "width: 100%");
+
+    let entry_row = entry_table.insert_row(0, "entry_row");
+    
+    let entry_check_cell = entry_row.insert_cell(0, "entry_check_cell");
+    entry_check_cell.append_child(entry_check_input);
+
+    let entry_title_cell = entry_row.insert_cell(1, "entry_title_cell");
+    entry_title_cell.set_attribute("style", "width: 100%");
+    entry_title_cell.append_child(entry_title_input);
+
+    let mut toc_checklist = HtmlElement::get("toc_checklist");
+    toc_checklist.append_child(entry_table);
+    toc_checklist.build(view)
 }

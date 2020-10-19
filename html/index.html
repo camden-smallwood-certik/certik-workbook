@@ -64,13 +64,16 @@
         <table style="width: 100%; height: 100%">
             <tr>
                 <!-- Checklist and Table of Contents Area -->
-                <td style="border-color: transparent; width: 0">
+                <td style="border-color: transparent">
                     <div class="ui" style="border-right: 1px solid #555; resize: horizontal; width: 10rem; height: 100%">
                         <table style="width: 100%; height: 100%">
                             <tr>
                                 <td style="border-color: transparent; width: 100%">
-                                    <div class="ui" id="toc_contracts" style="border-bottom: 1px solid #555; resize: vertical; height: 3rem; width: 100%">
-                                        <h4 style="text-align: center; width: 100%">Contracts</h4>
+                                    <div class="ui" id="toc_checklist" style="border-bottom: 1px solid #555; resize: vertical; height: 3rem; width: 100%">
+                                        <h4 style="text-align: center; width: 100%">
+                                            Checklist
+                                            <button onclick="external.invoke('create_checklist_entry')">+</button>
+                                        </h4>
                                     </div>
                                 </td>
                             </tr>
@@ -83,19 +86,39 @@
                     </div>
                 </td>
                 <!-- Main Interface Area -->
-                <td style="border-color: transparent">
+                <td style="border-color: transparent; width: 100%">
                     <table style="width: 100%; height: 100%">
                         <!-- Toolbar Button Area -->
                         <tr>
-                            <td style="border-color: transparent; text-align: center; width: 100%">
-                                <button onclick="external.invoke('create_finding')">Create Finding</button>
-                                <button onclick="external.invoke('paste_finding')" id="paste_button" disabled>Paste Finding</button>
-                                <button onclick="external.invoke('clear_findings')">Clear Findings</button>
-                                <button onclick="external.invoke('load_workbook')">Load Workbook</button>
-                                <button onclick="external.invoke('save_workbook')">Save Workbook</button>
-                                <button onclick="external.invoke('import_markdown')">Import Markdown</button>
-                                <button onclick="external.invoke('export_markdown')">Export Markdown</button>
-                                <button onclick="external.invoke('export_pdf')" disabled>Export PDF</button>
+                            <td style="border-color: transparent; width: 100%">
+                                <table style="border: 0px none transparent; width: 100%; height: 100%; table-layout: auto">
+                                    <tr>
+                                        <td style="text-align: center; padding-left: 0.5rem; padding-right: 0.5rem">
+                                            <button style="padding-left: 0.5rem; padding-right: 0.5rem; width: 100%" onclick="external.invoke('create_finding')">Create Finding</button>
+                                        </td>
+                                        <td style="text-align: center; padding-left: 0.5rem; padding-right: 0.5rem">
+                                            <button style="padding-left: 0.5rem; padding-right: 0.5rem; width: 100%" onclick="external.invoke('paste_finding')" id="paste_button" disabled>Paste Finding</button>
+                                        </td>
+                                        <td style="border-right: 1px solid #555; text-align: center; padding-left: 0.5rem; padding-right: 0.5rem">
+                                            <button style="padding-left: 0.5rem; padding-right: 0.5rem; width: 100%" onclick="external.invoke('clear_findings')">Clear Findings</button>
+                                        </td>
+                                        <td style="text-align: center; padding-left: 0.5rem; padding-right: 0.5rem">
+                                            <button style="padding-left: 0.5rem; padding-right: 0.5rem; width: 100%" onclick="external.invoke('load_workbook')">Load Workbook</button>
+                                        </td>
+                                        <td style="border-right: 1px solid #555; text-align: center; padding-left: 0.5rem; padding-right: 0.5rem">
+                                            <button style="padding-left: 0.5rem; padding-right: 0.5rem; width: 100%" onclick="external.invoke('save_workbook')">Save Workbook</button>
+                                        </td>
+                                        <td style="text-align: center; padding-left: 0.5rem; padding-right: 0.5rem">
+                                            <button style="padding-left: 0.5rem; padding-right: 0.5rem; width: 100%" onclick="external.invoke('import_markdown')">Import Markdown</button>
+                                        </td>
+                                        <td style="border-right: 1px solid #555; text-align: center; padding-left: 0.5rem; padding-right: 0.5rem">
+                                            <button style="padding-left: 0.5rem; padding-right: 0.5rem; width: 100%" onclick="external.invoke('export_markdown')">Export Markdown</button>
+                                        </td>
+                                        <td style="text-align: center; padding-left: 0.5rem; padding-right: 0.5rem">
+                                            <button style="padding-left: 0.5rem; padding-right: 0.5rem; width: 100%" onclick="external.invoke('export_pdf')" disabled>Export PDF</button>
+                                        </td>
+                                    </tr>
+                                </table>
                             </td>
                         </tr>
                         <!-- Main Report/Findings Area -->
