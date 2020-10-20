@@ -349,7 +349,18 @@ fn import_markdown<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateDa
             Ok(md) => {
 
                 let arena = comrak::Arena::new();
-                let root = comrak::parse_document(&arena, md.as_str(), &comrak::ComrakOptions::default());
+                
+                let mut options = comrak::ComrakOptions::default();
+                options.extension.autolink = true;
+                options.extension.description_lists = true;
+                options.extension.footnotes = true;
+                options.extension.strikethrough = true;
+                options.extension.superscript = true;
+                options.extension.table = true;
+                options.extension.tagfilter = true;
+                options.extension.tasklist = true;
+
+                let root = comrak::parse_document(&arena, md.as_str(), &options);
                 
                 let mut parser = markdown::MarkdownParser::new();
                 parser.parse_ast_node(state, root);
@@ -374,9 +385,39 @@ fn export_markdown<'a>(state: &mut StateData) -> web_view::WVResult {
             Ok(file) => file
         };
 
-        let mut md = String::new();
+        let mut findings = vec![];
 
         for finding in state.findings.values() {
+            findings.push(finding.clone());
+        }
+
+        findings.sort_by(|lhs, rhs| lhs.id.cmp(&rhs.id));
+
+        let mut md = String::new();
+        md.push_str("| ID | Title | Type | Severity |\n");
+        md.push_str("|-:|-|-|-|\n");
+
+        for finding in &findings {
+            let severity = match finding.severity.unwrap() {
+                report::Severity::Critical => "Critical",
+                report::Severity::Major => "Major",
+                report::Severity::Minor => "Minor",
+                report::Severity::Informational => "Informational"
+            };
+
+            let severity_low = severity.to_lowercase();
+
+            md.push_str(
+                format!(
+                    "| [UDI-{:02}](#UDI-{:02}) | <span class=\"{}\">{}</span> | <span class=\"{}\">{}</span> | <span class=\"{}\">{}</span> |\n",
+                    finding.id, finding.id, severity_low, finding.title, severity_low, finding.class, severity_low, severity
+                ).as_str()
+            );
+        }
+
+        md.push_str("\n");
+
+        for finding in &findings {
             let severity = match finding.severity.unwrap() {
                 report::Severity::Critical => "Critical",
                 report::Severity::Major => "Major",
@@ -388,11 +429,11 @@ fn export_markdown<'a>(state: &mut StateData) -> web_view::WVResult {
             md.push_str("\n");
             md.push_str(format!("<section id=\"{}\">\n", severity.to_lowercase()).as_str());
             md.push_str("\n");
-            md.push_str(format!("### ![](https://svgshare.com/i/QKR.svg){}\n", finding.title).as_str());
+            md.push_str(format!("### ![](https://svgshare.com/i/QKR.svg)UDI-{}: {}\n", finding.id, finding.title).as_str());
             md.push_str("\n");
-            md.push_str("| Type | Severity | Location | Status |\n");
-            md.push_str("|-|-|-|-|\n");
-            md.push_str(format!("| {} | {} | {} | |\n", finding.class, severity, finding.location).as_str());
+            md.push_str("| Type | Severity | Location |\n");
+            md.push_str("|-|-|-|\n");
+            md.push_str(format!("| {} | {} | {} |\n", finding.class, severity, finding.location).as_str());
             md.push_str("\n");
             md.push_str("#### Description:\n");
             md.push_str("\n");
@@ -401,10 +442,6 @@ fn export_markdown<'a>(state: &mut StateData) -> web_view::WVResult {
             md.push_str("#### Recommendation:\n");
             md.push_str("\n");
             md.push_str(format!("{}\n", finding.recommendation.as_str()).as_str());
-            md.push_str("\n");
-            md.push_str("#### Alleviation:\n");
-            md.push_str("\n");
-            md.push_str(format!("{}\n", finding.alleviation.as_str()).as_str());
             md.push_str("\n");
             md.push_str("</section>\n");
             md.push_str("\n");
