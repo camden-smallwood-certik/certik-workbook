@@ -38,6 +38,7 @@ pub struct Report {
     pub delivery_time: String,
     pub repository: String,
     pub commit_hashes: Vec<String>,
+    pub checklist: Vec<(bool, String)>,
     pub overview: String,
-    pub findings: Vec<Finding>
+    pub findings: Vec<Finding>,
 }

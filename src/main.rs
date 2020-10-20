@@ -62,6 +62,10 @@ fn main() {
                 "export_markdown" => export_markdown(&mut state)?,
                 "export_pdf" => export_pdf(view)?,
                 "create_checklist_entry" => create_checklist_entry(view, &mut state)?,
+                "remove_checklist_entry" => remove_checklist_entry(view, &mut state, iter.next().unwrap().parse().unwrap())?,
+                "clear_checklist_entries" => clear_checklist_entries(view, &mut state)?,
+                "set_checklist_entry_checked" => set_checklist_entry_checked(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap().parse().unwrap())?,
+                "set_checklist_entry_text" => set_checklist_entry_text(view, &mut state, iter.next().unwrap().parse().unwrap(), iter.next().unwrap())?,
                 "create_finding" => create_finding(view, &mut state)?,
                 "copy_finding" => copy_finding(view, &mut state, iter.next().unwrap().parse().unwrap())?,
                 "paste_finding" => paste_finding(view, &mut state)?,
@@ -257,8 +261,14 @@ fn load_workbook<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData
                         return Err(web_view::Error::Custom(Box::new(error)))
                     }
 
-                    Ok(report::Report { mut findings, .. }) => {
+                    Ok(report::Report { checklist, mut findings, .. }) => {
+                        clear_checklist_entries(view, state)?;
                         clear_findings(view, state)?;
+
+                        for (index, entry) in checklist.iter().enumerate() {
+                            state.checklist.push(entry.clone());
+                            add_checklist_entry_to_web_view(view, index, (entry.0, entry.1.as_str()))?;
+                        }
                         
                         findings.sort_by(|lhs, rhs| lhs.id.cmp(&rhs.id));
 
@@ -298,13 +308,20 @@ fn save_workbook<'a>(state: &mut StateData) -> web_view::WVResult {
             delivery_time: "Oct. 19, 2020".to_string(),
             repository: "Repository URL".to_string(),
             commit_hashes: vec!["Commit Hash 1".to_string(), "Commit Hash 2".to_string()],
+            checklist: vec![],
             overview: "Executive Overview".to_string(),
             findings: vec![]
         };
 
+        for entry in &state.checklist {
+            report.checklist.push(entry.clone());
+        }
+
         for (_, finding) in &state.findings {
             report.findings.push(finding.clone());
         }
+
+        report.findings.sort_by(|lhs, rhs| lhs.id.cmp(&rhs.id));
 
         match serde_json::to_string(&report) {
             Err(error) => {
@@ -406,9 +423,60 @@ fn export_pdf<'a>(view: &mut web_view::WebView<'a, ()>) -> web_view::WVResult {
 }
 
 fn create_checklist_entry<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
-    let index = state.checklist.len();
+    let id = state.checklist.len();
     state.checklist.push((false, String::new()));
-    add_checklist_entry_to_web_view(view, (index, false, ""))
+    add_checklist_entry_to_web_view(view, id, (false, ""))
+}
+
+fn remove_checklist_entry<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize) -> web_view::WVResult {
+    if id < state.checklist.len() {
+        let _ = state.checklist.remove(id);
+
+        let mut entry_table = HtmlElement::get(format!("checklist{}_table", id).as_str());
+        entry_table.remove();
+        entry_table.build(view)
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No checklist entry for id {} was found!", id))))
+    }
+}
+
+fn clear_checklist_entries<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
+    let mut entries = vec![];
+
+    for entry in &state.checklist {
+        entries.push(entry.clone());
+    }
+
+    for (id, _) in entries.iter().enumerate() {
+        let _ = remove_checklist_entry(view, state, id);
+    }
+
+    Ok(())
+}
+
+fn set_checklist_entry_checked<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, checked: bool) -> web_view::WVResult {
+    if id < state.checklist.len() {
+        state.checklist[id].0 = checked;
+
+        let mut entry_check_input = HtmlElement::get(format!("checklist{}_check_input", id).as_str());
+        entry_check_input.set_checked(checked);
+        entry_check_input.build(view)
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No checklist entry for id {} was found!", id))))
+    }
+}
+
+fn set_checklist_entry_text<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData, id: usize, text: &str) -> web_view::WVResult {
+    if id < state.checklist.len() {
+        state.checklist[id].1 = text.to_string();
+
+        let mut entry_text_input = HtmlElement::get(format!("checklist{}_text_input", id).as_str());
+        entry_text_input.set_value(text);
+        entry_text_input.build(view)
+    
+    } else {
+        Err(web_view::Error::Custom(Box::new(format!("No checklist entry for id {} was found!", id))))
+    }
 }
 
 fn create_finding<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateData) -> web_view::WVResult {
@@ -690,7 +758,7 @@ fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, finding: &F
     title_text_input.set_attribute("id", format!("finding{}_title", finding.id).as_str());
     title_text_input.set_attribute("value", finding.title.as_str());
     title_text_input.set_attribute("style", "font-size: 1.5rem");
-    title_text_input.set_attribute("onchange", format!("set_finding_value(\"title\", {})", finding.id).as_str());
+    title_text_input.set_attribute("onchange", format!("external.invoke('set_finding_{} {} \"' + this.value.toString().replaceAll('\"', '\\\\'\\\\'') + '\"')", "title", finding.id).as_str());
     
     title_text_cell.append_child(title_text_input);
     
@@ -729,7 +797,7 @@ fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, finding: &F
     header_type_input.set_attribute("type", "text");
     header_type_input.set_attribute("value", finding.class.as_str());
     header_type_input.set_attribute("id", format!("finding{}_type", finding.id).as_str());
-    header_type_input.set_attribute("onchange", format!("set_finding_value(\"type\", {})", finding.id).as_str());
+    header_type_input.set_attribute("onchange", format!("external.invoke('set_finding_{} {} \"' + this.value.toString().replaceAll('\"', '\\\\'\\\\'') + '\"')", "type", finding.id).as_str());
     
     header_type_cell.append_child(header_type_input);
 
@@ -739,7 +807,7 @@ fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, finding: &F
 
     let mut header_severity_select = HtmlElement::new("select", "header_severity_select");
     header_severity_select.set_attribute("id", format!("finding{}_severity", finding.id).as_str());
-    header_severity_select.set_attribute("onchange", format!("set_finding_value(\"severity\", {})", finding.id).as_str());
+    header_severity_select.set_attribute("onchange", format!("external.invoke('set_finding_{} {} \"' + this.value.toString().replaceAll('\"', '\\\\'\\\\'') + '\"')", "severity", finding.id).as_str());
 
     let mut create_severity_option = |name, text| {
         let mut option = HtmlElement::new("option", format!("finding{}_severity_{}_option", finding.id, name).as_str());
@@ -774,7 +842,7 @@ fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, finding: &F
     header_location_input.set_attribute("type", "text");
     header_location_input.set_attribute("value", finding.location.as_str());
     header_location_input.set_attribute("id", format!("finding{}_location", finding.id).as_str());
-    header_location_input.set_attribute("onchange", format!("set_finding_value(\"location\", {})", finding.id).as_str());
+    header_location_input.set_attribute("onchange", format!("external.invoke('set_finding_{} {} \"' + this.value.toString().replaceAll('\"', '\\\\'\\\\'') + '\"')", "location", finding.id).as_str());
 
     header_location_cell.append_child(header_location_input);
 
@@ -810,7 +878,11 @@ fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, finding: &F
         textarea.set_attribute("maxlength", "9999");
         textarea.set_field("style.resize", "vertical");
         textarea.set_attribute("id", format!("finding{}_{}", finding.id, name).as_str());
-        textarea.set_attribute("onchange", format!("set_finding_value(\"{}\", {})", name, finding.id).as_str());
+        textarea.set_attribute(
+            "onchange",
+            format!("external.invoke('set_finding_{} {} \"' + this.value.toString().replaceAll('\"', '\\\\'\\\\'') + '\"')", name, finding.id).as_str()
+        );
+
         new_cell.append_child(textarea);
     };
 
@@ -856,17 +928,27 @@ fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, finding: &F
     toc_findings.build(view)
 }
 
-fn add_checklist_entry_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, entry: (usize, bool, &str)) -> web_view::WVResult {
+fn add_checklist_entry_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, id: usize, entry: (bool, &str)) -> web_view::WVResult {
     let mut entry_check_input = HtmlElement::new("input", "entry_check_input");
-    entry_check_input.set_attribute("id", format!("checklist{}_check_input", entry.0).as_str());
+    entry_check_input.set_attribute("onclick", format!("external.invoke('set_checklist_entry_checked {} ' + this.checked.toString())", id).as_str());
+    entry_check_input.set_attribute("id", format!("checklist{}_check_input", id).as_str());
     entry_check_input.set_attribute("type", "checkbox");
-    entry_check_input.set_checked(entry.1);
+    entry_check_input.set_checked(entry.0);
     
-    let mut entry_title_input = HtmlElement::new("input", "entry_title_input");
-    entry_title_input.set_attribute("id", format!("checklist{}_title_input", entry.0).as_str());
-    entry_title_input.set_attribute("type", "text");
+    let mut entry_text_input = HtmlElement::new("input", "entry_text_input");
+    entry_text_input.set_attribute("type", "text");
+    entry_text_input.set_attribute("id", format!("checklist{}_text_input", id).as_str());
+    entry_text_input.set_attribute("style", "line-height: 1rem; margin: 0%; padding: 0%");
+    entry_text_input.set_attribute("onchange", format!("external.invoke('set_checklist_entry_text {} \"' + this.value.toString().replaceAll('\"', '\\\\'\\\\'') + '\"')", id).as_str());
+    entry_text_input.set_value(entry.1);
 
+    let mut entry_close_button = HtmlElement::new("button", "entry_close_button");
+    entry_close_button.set_inner_html("X");
+    entry_close_button.set_attribute("style", "background-color: tomato; width: 100%; height: 100%");
+    entry_close_button.set_attribute("onclick", format!("external.invoke(\"remove_checklist_entry {}\")", id).as_str());
+    
     let mut entry_table = HtmlElement::new("table", "entry_table");
+    entry_table.set_attribute("id", format!("checklist{}_table", id).as_str());
     entry_table.set_attribute("style", "width: 100%");
 
     let entry_row = entry_table.insert_row(0, "entry_row");
@@ -874,9 +956,12 @@ fn add_checklist_entry_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, ent
     let entry_check_cell = entry_row.insert_cell(0, "entry_check_cell");
     entry_check_cell.append_child(entry_check_input);
 
-    let entry_title_cell = entry_row.insert_cell(1, "entry_title_cell");
-    entry_title_cell.set_attribute("style", "width: 100%");
-    entry_title_cell.append_child(entry_title_input);
+    let entry_text_cell = entry_row.insert_cell(1, "entry_text_cell");
+    entry_text_cell.set_attribute("style", "width: 100%");
+    entry_text_cell.append_child(entry_text_input);
+
+    let entry_close_cell = entry_row.insert_cell(2, "entry_close_cell");
+    entry_close_cell.append_child(entry_close_button);
 
     let mut toc_checklist = HtmlElement::get("toc_checklist");
     toc_checklist.append_child(entry_table);

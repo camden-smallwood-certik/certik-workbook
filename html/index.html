@@ -131,11 +131,5 @@
                 </td>
             </tr>
         </table>
-        <script>
-            function set_finding_value(name, id) {
-                var element = document.getElementById('finding' + id.toString() + '_' + name);
-                external.invoke('set_finding_' + name + ' ' + id.toString() + ' "' + element.value.toString().replaceAll('"', '\'\'') + '"');
-            }
-        </script>
     </body>
 </html>
