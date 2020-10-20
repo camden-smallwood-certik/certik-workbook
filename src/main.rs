@@ -429,7 +429,7 @@ fn export_markdown<'a>(state: &mut StateData) -> web_view::WVResult {
             md.push_str("\n");
             md.push_str(format!("<section id=\"{}\">\n", severity.to_lowercase()).as_str());
             md.push_str("\n");
-            md.push_str(format!("### ![](https://svgshare.com/i/QKR.svg)UDI-{}: {}\n", finding.id, finding.title).as_str());
+            md.push_str(format!("### ![](https://svgshare.com/i/QKR.svg)UDI-{:02}: {}\n", finding.id, finding.title).as_str());
             md.push_str("\n");
             md.push_str("| Type | Severity | Location |\n");
             md.push_str("|-|-|-|\n");
