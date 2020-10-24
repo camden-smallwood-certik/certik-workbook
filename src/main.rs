@@ -405,12 +405,10 @@ fn export_markdown<'a>(state: &mut StateData) -> web_view::WVResult {
                 report::Severity::Informational => "Informational"
             };
 
-            let severity_low = severity.to_lowercase();
-
             md.push_str(
                 format!(
-                    "| [UDI-{:02}](#UDI-{:02}) | <span class=\"{}\">{}</span> | <span class=\"{}\">{}</span> | <span class=\"{}\">{}</span> |\n",
-                    finding.id, finding.id, severity_low, finding.title, severity_low, finding.class, severity_low, severity
+                    "| <span class=\"{sev_low}\">[XXX-{id:02}](#XXX-{id:02})</span> | <span class=\"{sev_low}\">{title}</span> | <span class=\"{sev_low}\">{kind}</span> | <span class=\"{sev_low}\">{sev}</span> |\n",
+                    sev_low = severity.to_lowercase(), sev = severity, id = finding.id, title = finding.title, kind = finding.class
                 ).as_str()
             );
         }
@@ -425,25 +423,32 @@ fn export_markdown<'a>(state: &mut StateData) -> web_view::WVResult {
                 report::Severity::Informational => "Informational"
             };
 
-            md.push_str("---\n");
+            let severity_low = severity.to_lowercase();
+
             md.push_str("\n");
-            md.push_str(format!("<section id=\"{}\">\n", severity.to_lowercase()).as_str());
+            md.push_str("<div style=\"page-break-after: always\"></div>\n");
             md.push_str("\n");
-            md.push_str(format!("### ![](https://svgshare.com/i/QKR.svg)UDI-{:02}: {}\n", finding.id, finding.title).as_str());
+            md.push_str(format!("### ![](https://svgshare.com/i/QKR.svg)XXX-{:02}: {}\n", finding.id, finding.title).as_str());
             md.push_str("\n");
             md.push_str("| Type | Severity | Location |\n");
             md.push_str("|-|-|-|\n");
-            md.push_str(format!("| {} | {} | {} |\n", finding.class, severity, finding.location).as_str());
+            md.push_str(format!("| {} | {} | <span class=\"{}\">{}</span> |\n", finding.class, severity, severity.to_lowercase(), finding.location).as_str());
             md.push_str("\n");
-            md.push_str("#### Description:\n");
+            md.push_str(format!("#### <span class=\"{}\">Description:</span>\n", severity_low).as_str());
+            md.push_str("\n");
+            md.push_str(format!("<div class=\"{}\">\n", severity_low).as_str());
             md.push_str("\n");
             md.push_str(format!("{}\n", finding.description.as_str()).as_str());
             md.push_str("\n");
-            md.push_str("#### Recommendation:\n");
+            md.push_str("</div>\n");
+            md.push_str("\n");
+            md.push_str(format!("#### <span class=\"{}\">Recommendation:</span>\n", severity_low).as_str());
+            md.push_str("\n");
+            md.push_str(format!("<div class=\"{}\">\n", severity_low).as_str());
             md.push_str("\n");
             md.push_str(format!("{}\n", finding.recommendation.as_str()).as_str());
             md.push_str("\n");
-            md.push_str("</section>\n");
+            md.push_str("</div>\n");
             md.push_str("\n");
         }
 
@@ -925,7 +930,7 @@ fn add_finding_to_web_view<'a>(view: &mut web_view::WebView<'a, ()>, finding: &F
 
     create_text_area("description", "Description:", finding.description.as_str());
     create_text_area("recommendation", "Recommendation:", finding.recommendation.as_str());
-    create_text_area("alleviation", "Alleviation:", finding.alleviation.as_str());
+    //create_text_area("alleviation", "Alleviation:", finding.alleviation.as_str());
 
     new_cell.append_child(HtmlElement::new("p", "spacer"));
 
