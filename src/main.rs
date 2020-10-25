@@ -3,7 +3,6 @@ extern crate serde_derive;
 
 pub mod command;
 pub mod html;
-pub mod markdown;
 pub mod report;
 
 use crate::{
@@ -361,13 +360,191 @@ fn import_markdown<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateDa
                 options.extension.tasklist = true;
 
                 let root = comrak::parse_document(&arena, md.as_str(), &options);
-                
-                let mut parser = markdown::MarkdownParser::new();
-                parser.parse_ast_node(state, root);
+                let mut iter = root.children();
+                let mut node = iter.next().unwrap();
+                let mut valid = true;
 
-                for ref finding in parser.findings {
+                while valid {
+                    use comrak::{
+                        nodes::{NodeHeading, NodeValue},
+                    };
+                    use report::Severity;
+
+                    let mut finding = Finding {
+                        id: state.current_finding_id + 1,
+                        title: String::new(),
+                        class: String::new(),
+                        severity: None,
+                        location: String::new(),
+                        description: String::new(),
+                        recommendation: String::new(),
+                        alleviation: String::new()
+                    };
+
+                    if let NodeValue::Heading(NodeHeading { level: 3, setext: false }) = node.data.borrow().value {
+                        for child in node.children() {
+                            if let NodeValue::Text(ref text) = child.data.borrow().value {
+                                finding.title.push_str(std::str::from_utf8(text).unwrap());
+                            }
+                        }
+                    } else {
+                        panic!("Expected heading level 3, found {:?}", node);
+                    }
+
+                    node = match iter.next() {
+                        None => break,
+                        Some(node) => node
+                    };
+
+                    if let NodeValue::Table(_) = node.data.borrow().value {
+                        for row_node in node.children() {
+                            if let NodeValue::TableRow(is_header) = row_node.data.borrow().value {
+                                if !is_header {
+                                    for (cell_index, cell_node) in row_node.children().enumerate() {
+                                        if let NodeValue::TableCell = cell_node.data.borrow().value {
+                                            for child in cell_node.children() {
+                                                if let NodeValue::Text(ref text) = child.data.borrow().value {
+                                                    let text = std::str::from_utf8(text).unwrap();
+
+                                                    match cell_index {
+                                                        0 => {
+                                                            finding.class.push_str(text);
+                                                        }
+
+                                                        1 => {
+                                                            finding.severity = match text {
+                                                                "Critical" => Some(Severity::Critical),
+                                                                "Major" => Some(Severity::Major),
+                                                                "Minor" => Some(Severity::Minor),
+                                                                "Informational" => Some(Severity::Informational),
+                                                                _ => None
+                                                            };
+                                                        }
+
+                                                        2 => {
+                                                            finding.location.push_str(text)
+                                                        },
+                                                        _ => ()
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            panic!("Expected table cell");
+                                        }
+                                    }
+                                }
+                            } else {
+                                panic!("Expected table row, found {:?}", row_node);
+                            }
+                        }
+                    }
+
+                    node = match iter.next() {
+                        None => break,
+                        Some(node) => node
+                    };
+
+                    if let NodeValue::Heading(NodeHeading { level: 4, setext: false }) = node.data.borrow().value {
+                        let mut heading = String::new();
+
+                        for child in node.children() {
+                            if let NodeValue::Text(ref text) = child.data.borrow().value {
+                                heading.push_str(std::str::from_utf8(text).unwrap());
+                            }
+                        }
+
+                        assert!(heading == "Description:", "Expected description heading");
+                    } else {
+                        panic!("Expected heading level 4, found {:?}", node);
+                    }
+                        
+                    node = match iter.next() {
+                        None => break,
+                        Some(node) => node
+                    };
+
+                    'description: loop {
+                        match node.data.borrow().value {
+                            NodeValue::Heading(NodeHeading { level: 3, setext: false }) => break 'description,
+                            NodeValue::Heading(NodeHeading { level: 4, setext: false }) => break 'description,
+                            NodeValue::Text(ref text) => finding.description.push_str(std::str::from_utf8(text).unwrap()),
+                            NodeValue::Code(ref text) => finding.description.push_str(format!("`{}`", std::str::from_utf8(text).unwrap()).as_str()),
+                            NodeValue::CodeBlock(ref code) => finding.description.push_str(format!("\n\n```\n{}```", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str()),
+                            NodeValue::HtmlBlock(_) => (),
+                            NodeValue::Paragraph => for paranode in node.children() {
+                                match paranode.data.borrow().value {
+                                    NodeValue::Heading(NodeHeading { level: 3, setext: false }) => break 'description,
+                                    NodeValue::Heading(NodeHeading { level: 4, setext: false }) => break 'description,
+                                    NodeValue::Text(ref text) => finding.description.push_str(std::str::from_utf8(text).unwrap()),
+                                    NodeValue::Code(ref text) => finding.description.push_str(format!("`{}`", std::str::from_utf8(text).unwrap()).as_str()),
+                                    NodeValue::CodeBlock(ref code) => finding.description.push_str(format!("\n\n```\n{}```", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str()),
+                                    NodeValue::HtmlBlock(_) => (),
+                                    ref node => println!("Unused description paragraph node: {:?}", node)
+                                }
+                            }
+                            ref node => println!("Unused description node: {:?}", node)
+                        }
+                        
+                        node = match iter.next() {
+                            None => break,
+                            Some(node) => node
+                        };
+                    }
+
+                    if let NodeValue::Heading(NodeHeading { level: 4, setext: false }) = node.data.borrow().value {
+                        let mut heading = String::new();
+
+                        for child in node.children() {
+                            if let NodeValue::Text(ref text) = child.data.borrow().value {
+                                heading.push_str(std::str::from_utf8(text).unwrap());
+                            }
+                        }
+
+                        assert!(heading == "Recommendation:", "Expected recommendation heading");
+                    } else {
+                        panic!("Expected heading level 4, found {:?}", node);
+                    }
+
+                    node = match iter.next() {
+                        None => break,
+                        Some(node) => node
+                    };
+
+                    'recommendation: loop {
+                        match node.data.borrow().value {
+                            NodeValue::Heading(NodeHeading { level: 3, setext: false }) => break 'recommendation,
+                            NodeValue::Heading(NodeHeading { level: 4, setext: false }) => break 'recommendation,
+                            NodeValue::Text(ref text) => finding.recommendation.push_str(std::str::from_utf8(text).unwrap()),
+                            NodeValue::Code(ref text) => finding.recommendation.push_str(format!("`{}`", std::str::from_utf8(text).unwrap()).as_str()),
+                            NodeValue::CodeBlock(ref code) => finding.recommendation.push_str(format!("\n\n```\n{}```", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str()),
+                            NodeValue::HtmlBlock(_) => (),
+                            NodeValue::Paragraph => for paranode in node.children() {
+                                match paranode.data.borrow().value {
+                                    NodeValue::Heading(NodeHeading { level: 3, setext: false }) => break 'recommendation,
+                                    NodeValue::Heading(NodeHeading { level: 4, setext: false }) => break 'recommendation,
+                                    NodeValue::Text(ref text) => finding.recommendation.push_str(std::str::from_utf8(text).unwrap()),
+                                    NodeValue::Code(ref text) => finding.recommendation.push_str(format!("`{}`", std::str::from_utf8(text).unwrap()).as_str()),
+                                    NodeValue::CodeBlock(ref code) => finding.recommendation.push_str(format!("\n\n```\n{}```", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str()),
+                                    NodeValue::HtmlBlock(_) => (),
+                                    ref node => println!("Unused recommendation paragraph node: {:?}", node)
+                                }
+                            }
+                            ref node => println!("Unused recommendation node: {:?}", node)
+                        }
+
+                        node = match iter.next() {
+                            None => {
+                                valid = false;
+                                break;
+                            },
+                            Some(node) => node
+                        };
+                    }
+
                     assert!(state.findings.insert(finding.id, finding.clone()).is_none());
-                    add_finding_to_web_view(view, finding)?;
+                    state.current_finding_id += 1;
+
+                    add_finding_to_web_view(view, &finding)?;
                 }
             }
         }
