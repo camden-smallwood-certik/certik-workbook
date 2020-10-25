@@ -469,7 +469,7 @@ fn import_markdown<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateDa
                             NodeValue::Heading(NodeHeading { level: 4, setext: false }) => break 'description,
                             NodeValue::Text(ref text) => finding.description.push_str(std::str::from_utf8(text).unwrap()),
                             NodeValue::Code(ref text) => finding.description.push_str(format!("`{}`", std::str::from_utf8(text).unwrap()).as_str()),
-                            NodeValue::CodeBlock(ref code) => finding.description.push_str(format!("\n\n```\n{}```", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str()),
+                            NodeValue::CodeBlock(ref code) => finding.description.push_str(format!("\n\n```\n{}```\n", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str()),
                             NodeValue::HtmlBlock(_) => (),
                             NodeValue::Paragraph => for paranode in node.children() {
                                 match paranode.data.borrow().value {
@@ -477,7 +477,7 @@ fn import_markdown<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateDa
                                     NodeValue::Heading(NodeHeading { level: 4, setext: false }) => break 'description,
                                     NodeValue::Text(ref text) => finding.description.push_str(std::str::from_utf8(text).unwrap()),
                                     NodeValue::Code(ref text) => finding.description.push_str(format!("`{}`", std::str::from_utf8(text).unwrap()).as_str()),
-                                    NodeValue::CodeBlock(ref code) => finding.description.push_str(format!("\n\n```\n{}```", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str()),
+                                    NodeValue::CodeBlock(ref code) => finding.description.push_str(format!("\n\n```\n{}```\n", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str()),
                                     NodeValue::HtmlBlock(_) => (),
                                     ref node => println!("Unused description paragraph node: {:?}", node)
                                 }
@@ -516,7 +516,7 @@ fn import_markdown<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateDa
                             NodeValue::Heading(NodeHeading { level: 4, setext: false }) => break 'recommendation,
                             NodeValue::Text(ref text) => finding.recommendation.push_str(std::str::from_utf8(text).unwrap()),
                             NodeValue::Code(ref text) => finding.recommendation.push_str(format!("`{}`", std::str::from_utf8(text).unwrap()).as_str()),
-                            NodeValue::CodeBlock(ref code) => finding.recommendation.push_str(format!("\n\n```\n{}```", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str()),
+                            NodeValue::CodeBlock(ref code) => finding.recommendation.push_str(format!("\n\n```\n{}```\n", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str()),
                             NodeValue::HtmlBlock(_) => (),
                             NodeValue::Paragraph => for paranode in node.children() {
                                 match paranode.data.borrow().value {
@@ -524,7 +524,7 @@ fn import_markdown<'a>(view: &mut web_view::WebView<'a, ()>, state: &mut StateDa
                                     NodeValue::Heading(NodeHeading { level: 4, setext: false }) => break 'recommendation,
                                     NodeValue::Text(ref text) => finding.recommendation.push_str(std::str::from_utf8(text).unwrap()),
                                     NodeValue::Code(ref text) => finding.recommendation.push_str(format!("`{}`", std::str::from_utf8(text).unwrap()).as_str()),
-                                    NodeValue::CodeBlock(ref code) => finding.recommendation.push_str(format!("\n\n```\n{}```", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str()),
+                                    NodeValue::CodeBlock(ref code) => finding.recommendation.push_str(format!("\n\n```\n{}```\n", std::str::from_utf8(code.literal.as_slice()).unwrap()).as_str()),
                                     NodeValue::HtmlBlock(_) => (),
                                     ref node => println!("Unused recommendation paragraph node: {:?}", node)
                                 }
